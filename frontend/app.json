@@ -1,37 +1,61 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Conexia CLM",
+    "slug": "conexia-clm",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/conexia-logo.png",
+    "scheme": "conexia",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Capturar evidencias en campo con timestamp",
+        "NSPhotoLibraryUsageDescription": "Seleccionar fotos como evidencia contractual",
+        "NSLocationWhenInUseUsageDescription": "Geolocalizar evidencias en sitio"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "foregroundImage": "./assets/images/conexia-logo.png",
+        "backgroundColor": "#FFFFFF"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/conexia-logo.png"
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        { "cameraPermission": "Capturar evidencias en campo" }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Adjuntar fotos como evidencia contractual" }
+      ],
+      [
+        "expo-location",
+        { "locationWhenInUsePermission": "Geolocalizar evidencias en sitio" }
+      ],
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/conexia-logo.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#FFFFFF"
         }
       ]
     ],
