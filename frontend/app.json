@@ -36,19 +36,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
-      [
-        "expo-camera",
-        { "cameraPermission": "Capturar evidencias en campo" }
-      ],
-      [
-        "expo-image-picker",
-        { "photosPermission": "Adjuntar fotos como evidencia contractual" }
-      ],
-      [
-        "expo-location",
-        { "locationWhenInUsePermission": "Geolocalizar evidencias en sitio" }
-      ],
       [
         "expo-splash-screen",
         {
