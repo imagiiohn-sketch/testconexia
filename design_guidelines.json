@@ -1,0 +1,152 @@
+{
+  "app_name": "CONEXIA",
+  "personality": "1 iOS-Native Clean fused with 5 Brutalist utility for data density",
+  "personality_one_liner": "An enterprise-grade, precision-engineered CLM platform that balances structural data density with elegant, trustworthy native surfaces.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#0D1414",
+    "surfaceSecondary": "#F4F6F6",
+    "onSurfaceSecondary": "#465454",
+    "surfaceTertiary": "#E7EBEB",
+    "onSurfaceTertiary": "#2E3B3B",
+    "surfaceInverse": "#1F2B2B",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#1F4A4A",
+    "brandPrimary": "#1F4A4A",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#346B6B",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#E2ECEC",
+    "onBrandTertiary": "#1F4A4A",
+    "success": "#228B22",
+    "onSuccess": "#FFFFFF",
+    "warning": "#E67300",
+    "onWarning": "#FFFFFF",
+    "error": "#D32F2F",
+    "onError": "#FFFFFF",
+    "info": "#005B9F",
+    "onInfo": "#FFFFFF",
+    "border": "#D8E0E0",
+    "borderStrong": "#9DB5B5",
+    "divider": "#E7EBEB"
+  },
+  "typography": {
+    "displayFontFamily": "System",
+    "textFontFamily": "System",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous padding around structural containers; tight spacing inside data blocks. Use safe area insets at roots.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use glass on bottom tab bar",
+      "Use glass on sticky headers over scrolling content",
+      "Use glass on evidence capture GPS pills and over hero backgrounds"
+    ],
+    "dont's": [
+      "Never blur body content or form inputs",
+      "Never blur dense KPI cards or contract lists"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Smart Dashboard",
+      "purpose": "A high-level executive view displaying financial KPIs, timeline alerts, and pending workflows.",
+      "states": {
+        "loading": "Skeleton grids for KPIs.",
+        "empty": "Illustration of a blueprint with 'Awaiting first contract data'.",
+        "error": "Failed to load dashboard data. Retry button."
+      },
+      "layout": "Header with user profile and notification bell. Hero section with a structural blueprint image and glassmorphism overlay showing critical alerts. Horizontal scrollable row for Financial KPI cards (large mono numbers). Below, a 'Recent Activity' / Alerts vertical list with severity semaphores."
+    },
+    {
+      "name": "Contracts",
+      "purpose": "The core repository showing contract lifecycle states with advanced filtering.",
+      "states": {
+        "loading": "List of skeleton cards with badge placeholders.",
+        "empty": "No contracts found matching the filters.",
+        "error": "Error fetching contracts. Retry."
+      },
+      "layout": "Sticky header with Search and Filter chips (All, Draft, In Review, Signed, Active). Vertical list of Contract Cards. Each card shows title, status badge, counterparty, value, and expiration date."
+    },
+    {
+      "name": "Evidence",
+      "purpose": "Field evidence capture with photos, GPS, and timestamp linkage to contracts.",
+      "states": {
+        "loading": "Spinner over camera viewfinder or list.",
+        "empty": "Camera prompt: 'Tap + to log field evidence'.",
+        "error": "Camera or location permission denied."
+      },
+      "layout": "Grid of previously captured evidence cards. Each card uses an image with a dark gradient scrim at the bottom and a frosted GPS/Timestamp pill overlaid. FAB at the bottom right for new capture."
+    },
+    {
+      "name": "Profile",
+      "purpose": "User settings, department details, and app preferences.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "Failed to load profile."
+      },
+      "layout": "Standard iOS-style grouped list using surfaceSecondary cards. Sections for Account, Notifications, Support, and Logout."
+    }
+  ],
+  "images": {
+    "dashboard_hero_bg": {
+      "url": "https://images.unsplash.com/photo-1721244654394-36a7bc2da288?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwzfHxhcmNoaXRlY3R1cmFsJTIwYmx1ZXByaW50JTIwZW5naW5lZXJpbmclMjBhYnN0cmFjdHxlbnwwfHx8fDE3ODIyMzk2NTh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Architectural blueprint background for dashboard"
+    },
+    "evidence_sample_1": {
+      "url": "https://images.unsplash.com/photo-1652318522046-8f6057f04fb0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwcHJvZ3Jlc3MlMjB3b3JrZXIlMjB0YWJsZXR8ZW58MHx8fHwxNzgyMjM5NjU4fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Construction site evidence photo"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Honor the primary brand color (Dark Teal: #1F4A4A) rigorously as the main anchor. Keep the background clean (white/light grey) to ensure data readability.",
+    "Typography Constraint: Use standard device System fonts only. Do NOT use @expo-google-fonts. Set 'System' as fontFamily. Use mono font settings (Platform.select({ios: 'Menlo', android: 'monospace'})) explicitly for KPI numbers, financial values, and timestamps.",
+    "Smart Dashboard Layout: Use a top row of KPI tiles in a scrollable horizontal view or a 2x2 grid. Use the `dashboard_hero_bg` image with an `expo-linear-gradient` scrim and a glassmorphism overlay card for the topmost critical alert.",
+    "Contract Card Blueprint: Use `surfaceSecondary`. Top-left: Lifecycle Status badge (pill with status-specific colors). Title: bold text. Bottom row: Monetary value (mono font) and Due Date.",
+    "Evidence Capture Card Blueprint: An `expo-image` filling the card. Mandatory vertical `expo-linear-gradient` scrim at the bottom. Overlay a small, frosted glass pill (or solid `surfaceInverse`) at the bottom-left containing the GPS coordinates and timestamp.",
+    "Risk Badge Component: Small pills with a bold label. Map colors directly from the status palette (Success=Green, Warning=Yellow, Error=Red) based on the risk level.",
+    "Workflow Stepper Blueprint: Use vertical or horizontal dots connected by lines. Active/Completed steps use `brandPrimary`. Pending steps use `surfaceTertiary`.",
+    "AI Copilot Insight Card Blueprint: Card with `brandTertiary` background, a 1pt `brandPrimary` border, and a 'Sparkle' icon (from Phosphor/Ionicons, NOT an emoji). Used to highlight risky clauses or extracted dates.",
+    "Never use emojis in the UI. Rely strictly on Phosphor icons.",
+    "Do NOT use any blues or indigos as defaults. Stick entirely to the teal/petroleum green palette provided.",
+    "Implement haptics on toggle switches, tab changes, and primary action buttons."
+  ]
+}
