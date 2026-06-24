@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { colors, spacing, radius, font, STATUS_COLORS, RISK_COLORS, fmtMoney, fmtDate } from "@/src/theme";
 
 const STEP_LABELS: Record<string, string> = {
@@ -15,6 +16,7 @@ export default function ContractDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useT();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [aiBusy, setAiBusy] = useState(false);
@@ -72,9 +74,26 @@ export default function ContractDetail() {
           <View style={[styles.pill, { backgroundColor: s.bg }]}><Text style={[styles.pillText, { color: s.fg }]}>{s.label.toUpperCase()}</Text></View>
           <View style={[styles.pill, { backgroundColor: r.bg }]}><Text style={[styles.pillText, { color: r.fg }]}>RIESGO {r.label.toUpperCase()}</Text></View>
         </View>
+        {data.contract_number ? <Text style={styles.contractNum}>{data.contract_number}</Text> : null}
         <Text style={styles.title}>{data.title}</Text>
         <Text style={styles.counter}>{data.counterparty}</Text>
         {data.description ? <Text style={styles.desc}>{data.description}</Text> : null}
+
+        {/* Common contract fields */}
+        <View style={styles.commonGrid}>
+          <CommonCell label={t("contracts.label.consultant")} value={data.consultant || "—"} />
+          <CommonCell label={t("contracts.label.product")} value={data.product || "—"} />
+          <CommonCell label={t("contracts.label.scheduled")} value={fmtDate(data.scheduled_date)} mono />
+          <CommonCell label={t("contracts.label.delivery")} value={fmtDate(data.delivery_date || data.end_date)} mono />
+          <CommonCell label={t("contracts.label.pay")} value={`${data.pay_pct || 0}%`} mono />
+          <CommonCell label={t("newc.category")} value={t(`cat.${data.category || "bienes"}`)} />
+        </View>
+        {data.observations ? (
+          <View style={styles.obsBlock}>
+            <Text style={styles.obsLabel}>{t("contracts.label.observations")}</Text>
+            <Text style={styles.obsText}>{data.observations}</Text>
+          </View>
+        ) : null}
 
         {/* Financial KPIs */}
         <View style={styles.kpiCard}>
@@ -199,8 +218,41 @@ export default function ContractDetail() {
           ))}
         </View>
 
+        {/* Sub-modules */}
+        <SubList title={t("risk.title")} items={data.risks || []} emptyKey={t("risk.empty")} render={(it) => (
+          <>
+            <Text style={subStyles.subTitle}>{it.risk}</Text>
+            <Text style={subStyles.subMeta}>
+              {t("risk.field.probability")}: {t(`level.${it.probability}`)} · {t("risk.field.impact")}: {t(`level.${it.impact}`)} · {t(`status.${it.status}`)}
+            </Text>
+            {it.mitigation ? <Text style={subStyles.subDesc}>↪ {it.mitigation}</Text> : null}
+            {it.responsible ? <Text style={subStyles.subMeta}>👤 {it.responsible}</Text> : null}
+          </>
+        )} />
+        <SubList title={t("mod.title")} items={data.modifications || []} emptyKey={t("mod.empty")} render={(it) => (
+          <>
+            <Text style={subStyles.subTitle}>{it.type} · {fmtDate(it.date)}</Text>
+            <Text style={subStyles.subMeta}>Δ {fmtMoney(it.amount || 0)} · {it.days || 0}d · {t(`status.${it.approval}`)}</Text>
+            {it.justification ? <Text style={subStyles.subDesc}>{it.justification}</Text> : null}
+          </>
+        )} />
+        <SubList title={t("pay.title")} items={data.payments || []} emptyKey={t("pay.empty")} render={(it) => (
+          <>
+            <Text style={subStyles.subTitle}>{it.invoice} · {fmtMoney(it.amount, data.currency)}</Text>
+            <Text style={subStyles.subMeta}>{fmtDate(it.date)} · {t(`status.${it.status}`)}</Text>
+            {it.deliverable ? <Text style={subStyles.subDesc}>↪ {it.deliverable}</Text> : null}
+          </>
+        )} />
+        <SubList title={t("esf.title")} items={data.esf_items || []} emptyKey={t("esf.empty")} render={(it) => (
+          <>
+            <Text style={subStyles.subTitle}>{it.requirement}</Text>
+            <Text style={subStyles.subMeta}>{it.compliant ? "✓ " + t("yes") : "✗ " + t("no")} · {fmtDate(it.verification_date)}</Text>
+            {it.observations ? <Text style={subStyles.subDesc}>{it.observations}</Text> : null}
+          </>
+        )} />
+
         {/* Addenda */}
-        <Text style={styles.sectionTitle}>Adendas ({(data.addenda || []).length})</Text>
+        <Text style={styles.sectionTitle}>{t("detail.addenda")} ({(data.addenda || []).length})</Text>
         {(data.addenda || []).map((a: any) => (
           <View key={a.contract_id} style={styles.addenCard}>
             <Text style={styles.addenTitle}>{a.title}</Text>
@@ -209,9 +261,31 @@ export default function ContractDetail() {
         ))}
         <Pressable style={styles.addBtn} onPress={() => router.push(`/contract/${id}/addendum` as any)} testID="add-addendum-button">
           <Ionicons name="add-circle-outline" size={16} color={colors.brandPrimary} />
-          <Text style={styles.addBtnText}>Agregar Adenda</Text>
+          <Text style={styles.addBtnText}>{t("detail.addAddendum")}</Text>
         </Pressable>
       </ScrollView>
+    </View>
+  );
+}
+
+function CommonCell({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <View style={{ width: "33.33%", padding: 4 }}>
+      <Text style={{ fontSize: 9, fontWeight: "800", color: colors.onSurfaceSecondary, letterSpacing: 0.6 }}>{label}</Text>
+      <Text style={[{ fontSize: 12, color: colors.onSurface, fontWeight: "600", marginTop: 2 }, mono && { fontFamily: font.mono }]} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function SubList({ title, items, emptyKey, render }: { title: string; items: any[]; emptyKey: string; render: (it: any) => any }) {
+  return (
+    <View>
+      <Text style={subStyles.title}>{title} ({items.length})</Text>
+      {items.length === 0 ? (
+        <Text style={subStyles.empty}>{emptyKey}</Text>
+      ) : items.map((it, i) => (
+        <View key={it.id || i} style={subStyles.row}>{render(it)}</View>
+      ))}
     </View>
   );
 }
@@ -233,6 +307,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "800", color: colors.onSurface },
   counter: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 2 },
   desc: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 6 },
+  contractNum: { fontFamily: font.mono, fontSize: 10, color: colors.brandPrimary, fontWeight: "800", letterSpacing: 1, marginBottom: 2 },
+  commonGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: spacing.md, backgroundColor: colors.surfaceSecondary, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  obsBlock: { marginTop: spacing.sm, padding: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, borderLeftWidth: 3, borderLeftColor: colors.brandPrimary },
+  obsLabel: { fontSize: 9, fontWeight: "800", color: colors.brandPrimary, letterSpacing: 0.8 },
+  obsText: { fontSize: 12, color: colors.onSurface, marginTop: 2 },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   pillText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
   kpiCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.md, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border },
@@ -275,4 +354,13 @@ const styles = StyleSheet.create({
   addenSub: { fontSize: 12, color: colors.onSurfaceSecondary, fontFamily: font.mono, marginTop: 2 },
   addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandPrimary, borderStyle: "dashed" },
   addBtnText: { color: colors.brandPrimary, fontWeight: "700", fontSize: 13 },
+});
+
+const subStyles = StyleSheet.create({
+  title: { fontSize: 12, fontWeight: "800", color: colors.onSurfaceSecondary, letterSpacing: 1.2, marginTop: spacing.xl, marginBottom: spacing.sm },
+  empty: { fontSize: 12, color: colors.onSurfaceSecondary, fontStyle: "italic" },
+  row: { backgroundColor: colors.surfaceSecondary, padding: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: colors.brandSecondary },
+  subTitle: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
+  subMeta: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 2 },
+  subDesc: { fontSize: 11, color: colors.onSurface, marginTop: 4, fontStyle: "italic" },
 });

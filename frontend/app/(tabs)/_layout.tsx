@@ -5,8 +5,10 @@ import { Platform, View } from "react-native";
 import { BlurView } from "expo-blur";
 
 import { colors } from "@/src/theme";
+import { useT } from "@/src/i18n";
 
 export default function TabsLayout() {
+  const { t } = useT();
   return (
     <Tabs
       screenOptions={{
@@ -30,38 +32,26 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Panel",
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
-          tabBarButtonTestID: "tab-dashboard",
-        }}
-      />
-      <Tabs.Screen
-        name="contracts"
-        options={{
-          title: "Contratos",
-          tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
-          tabBarButtonTestID: "tab-contracts",
-        }}
-      />
-      <Tabs.Screen
-        name="evidence"
-        options={{
-          title: "Evidencias",
-          tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" size={size} color={color} />,
-          tabBarButtonTestID: "tab-evidence",
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Perfil",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" size={size} color={color} />,
-          tabBarButtonTestID: "tab-profile",
-        }}
-      />
+      <Tabs.Screen name="index" options={{
+        title: t("tabs.dashboard"),
+        tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
+        tabBarButtonTestID: "tab-dashboard",
+      }} />
+      <Tabs.Screen name="contracts" options={{
+        title: t("tabs.contracts"),
+        tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
+        tabBarButtonTestID: "tab-contracts",
+      }} />
+      <Tabs.Screen name="evidence" options={{
+        title: t("tabs.evidence"),
+        tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" size={size} color={color} />,
+        tabBarButtonTestID: "tab-evidence",
+      }} />
+      <Tabs.Screen name="profile" options={{
+        title: t("tabs.profile"),
+        tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" size={size} color={color} />,
+        tabBarButtonTestID: "tab-profile",
+      }} />
     </Tabs>
   );
 }

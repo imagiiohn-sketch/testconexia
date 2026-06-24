@@ -1,0 +1,44 @@
+{
+  "summary": "Backend-only test pass for Conexia CLM v2 (iteration 3). Re-authored /app/backend/tests/test_conexia_clm.py to cover every item in the review request: email/password register+login+locale, bcrypt hashing (password_hash never returned), seed v2 with all 6 categories (bienes, obras, servicios_no_consultoria, consultor_individual, firma_consultora, acuerdo_marco) plus sub-collections (risks/payments/esf_items), GET /contracts?category=obras filter, contract detail includes new fields (contract_number/consultant/product/scheduled_date/delivery_date/pay_pct/observations/category/risks/modifications/payments/esf_items), POST risks/modifications/payments/esf endpoints + paid-payment increments executed_value, sign endpoint now correctly rejects draft contracts with 400 and only signs after workflow approval, plus regression on dashboard (kpis+alerts+recent+by_category), workflow rollup, addenda, evidence, and /ai/analyze. Result: 26/26 passing on the public preview URL https://contract-forge-35.preview.emergentagent.com. No backend bugs detected. AI analyze hits anthropic claude-sonnet-4-6 via emergentintegrations and returns valid JSON.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/register & /api/auth/login", "issue": "Pydantic EmailStr (email-validator) rejects special-use TLDs (.test, .example, .invalid, .localhost) with HTTP 422 before the custom 400/401 paths run. Not a bug per se, but document that valid public TLDs are required in tests/clients."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_conexia_clm.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Document in API spec that EmailStr rejects reserved TLDs (.test/.example/.invalid/.localhost) → 422; clients should use real-looking domains.",
+    "(Optional) Consider returning 401 instead of 422 when /api/auth/login is called with a syntactically invalid email, to keep the error surface uniform for credential failures. Currently invalid format yields 422 while wrong password/unknown user yields 401."
+  ],
+  "critical_code_review_comments": [
+    "bcrypt: hash_password uses bcrypt.gensalt(rounds=12) — strong; verify_password swallows all exceptions and returns False, which is safe.",
+    "doc_clean correctly strips both _id and password_hash from every API response, including nested dicts/lists — confirmed via TestPasswordAuth assertions.",
+    "Seed is idempotent (count_documents > 0 → skipped). Good for re-runs, but means changing SAMPLES does not refresh DB unless contracts collection is cleared. Consider a /api/seed?force=true flag for dev convenience.",
+    "POST /api/contracts/{id}/sign now enforces status ∈ (approved, signed, active) → 400 otherwise. Matches review requirement.",
+    "POST /api/contracts/{id}/payments with status='paid' performs $inc on executed_value AFTER the $push — confirmed sequence is correct and atomic per write.",
+    "server.py is 849 lines — approaching the 700-line guideline. Consider splitting auth/contracts/submodules/ai into routers.",
+    "AI endpoint hard-codes provider/model 'anthropic/claude-sonnet-4-6' — fine for MVP, but consider env override.",
+    "/auth/locale accepts a raw dict payload; would be cleaner as a typed pydantic LocaleRequest."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_conexia_clm.py (rewrote for v2: 26 tests, full review coverage)",
+    "/app/test_reports/pytest/pytest_results.xml (regenerated)",
+    "/app/test_reports/iteration_3.json (new)"
+  ],
+  "success_rate": {"backend": "100% (26/26)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Used existing /api/seed (idempotent v2 dataset = 6 contracts, one per category, with risks/payments/esf_items pre-populated). Also created a TEST_ password-auth user (test.user.<uuid>@conexiaqa.io) and TEST_ contracts/addenda for lifecycle assertions.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend v2 is fully green via /app/backend/tests/test_conexia_clm.py (26 tests, ~13s). The test file uses EmailStr-compatible domains (conexiaqa.io). Demo dev-login still works (demo@conexia.io, token starts with sess_). Seed v2 already populated (6 categories) — to re-seed fresh data the contracts collection must be cleared first. Mocked items per review request: Microsoft/Apple/Yahoo/SSO buttons (frontend-only), /api/contracts/{id}/sign produces a MOCK audit hash, and notification channels are not delivered (none of these are backend bugs).",
+  "rca_of_issue": "N/A — no defects encountered. The only test-authoring snag was Pydantic EmailStr rejecting .test / .example TLDs; resolved by switching test emails to @conexiaqa.io. All 14 review-request items verified explicitly: register success+409+400, login success+401, locale='en' persistence + invalid 400, seed 6 categories with risks/payments/esf, category=obras filter, contract detail new fields, POST risks/modifications/payments(paid→exec)/esf each adding timeline events, sign 400 on draft + 200 after approval, and full regression on dashboard/workflow/addenda/evidence/ai."
+}

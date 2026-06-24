@@ -38,88 +38,63 @@ async function authedFetch(path: string, init: RequestInit = {}): Promise<Respon
   return fetch(`${BASE}${path}`, { ...init, headers });
 }
 
+async function jsonOrThrow(r: Response) {
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try {
+      const j = await r.json();
+      detail = j.detail || detail;
+    } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
 export const api = {
-  async createSession(sessionId: string) {
-    const r = await fetch(`${BASE}/api/auth/session`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-    if (!r.ok) throw new Error("session failed");
-    return r.json();
+  // auth
+  createSession: (sessionId: string) =>
+    fetch(`${BASE}/api/auth/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) }).then(jsonOrThrow),
+  register: (body: { email: string; name: string; password: string; department?: string }) =>
+    fetch(`${BASE}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(jsonOrThrow),
+  loginEmail: (body: { email: string; password: string }) =>
+    fetch(`${BASE}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(jsonOrThrow),
+  devLogin: () => fetch(`${BASE}/api/auth/dev-login`, { method: "POST" }).then(jsonOrThrow),
+  me: () => authedFetch(`/api/auth/me`).then(jsonOrThrow),
+  logout: async () => { await authedFetch(`/api/auth/logout`, { method: "POST" }); },
+  setLocale: (locale: "es" | "en") =>
+    authedFetch(`/api/auth/locale`, { method: "POST", body: JSON.stringify({ locale }) }).then(jsonOrThrow),
+  seed: () => fetch(`${BASE}/api/seed`, { method: "POST" }).then(jsonOrThrow),
+  dashboard: () => authedFetch(`/api/dashboard`).then(jsonOrThrow),
+  listContracts: (params: { status?: string; category?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status && params.status !== "all") qs.set("status", params.status);
+    if (params.category && params.category !== "all") qs.set("category", params.category);
+    const q = qs.toString();
+    return authedFetch(`/api/contracts${q ? "?" + q : ""}`).then(jsonOrThrow);
   },
-  async devLogin() {
-    const r = await fetch(`${BASE}/api/auth/dev-login`, { method: "POST" });
-    if (!r.ok) throw new Error("dev login failed");
-    return r.json();
-  },
-  async me() {
-    const r = await authedFetch(`/api/auth/me`);
-    if (!r.ok) throw new Error("me failed");
-    return r.json();
-  },
-  async logout() {
-    await authedFetch(`/api/auth/logout`, { method: "POST" });
-  },
-  async seed() {
-    return (await fetch(`${BASE}/api/seed`, { method: "POST" })).json();
-  },
-  async dashboard() {
-    const r = await authedFetch(`/api/dashboard`);
-    if (!r.ok) throw new Error("dashboard failed");
-    return r.json();
-  },
-  async listContracts(status?: string) {
-    const qs = status && status !== "all" ? `?status=${status}` : "";
-    const r = await authedFetch(`/api/contracts${qs}`);
-    if (!r.ok) throw new Error("contracts failed");
-    return r.json();
-  },
-  async getContract(id: string) {
-    const r = await authedFetch(`/api/contracts/${id}`);
-    if (!r.ok) throw new Error("contract failed");
-    return r.json();
-  },
-  async createContract(body: any) {
-    const r = await authedFetch(`/api/contracts`, { method: "POST", body: JSON.stringify(body) });
-    if (!r.ok) throw new Error("create failed");
-    return r.json();
-  },
-  async workflowDecision(id: string, step: string, decision: "approved" | "rejected", note = "") {
-    const r = await authedFetch(`/api/contracts/${id}/workflow`, {
-      method: "POST", body: JSON.stringify({ step, decision, note }),
-    });
-    if (!r.ok) throw new Error("workflow failed");
-    return r.json();
-  },
-  async sign(id: string) {
-    const r = await authedFetch(`/api/contracts/${id}/sign`, { method: "POST" });
-    if (!r.ok) throw new Error("sign failed");
-    return r.json();
-  },
-  async addAddendum(id: string, body: any) {
-    const r = await authedFetch(`/api/contracts/${id}/addenda`, { method: "POST", body: JSON.stringify(body) });
-    if (!r.ok) throw new Error("addendum failed");
-    return r.json();
-  },
-  async listEvidence(contractId?: string) {
+  getContract: (id: string) => authedFetch(`/api/contracts/${id}`).then(jsonOrThrow),
+  createContract: (body: any) =>
+    authedFetch(`/api/contracts`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  workflowDecision: (id: string, step: string, decision: "approved" | "rejected", note = "") =>
+    authedFetch(`/api/contracts/${id}/workflow`, { method: "POST", body: JSON.stringify({ step, decision, note }) }).then(jsonOrThrow),
+  sign: (id: string) => authedFetch(`/api/contracts/${id}/sign`, { method: "POST" }).then(jsonOrThrow),
+  addAddendum: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}/addenda`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  addRisk: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}/risks`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  addModification: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}/modifications`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  addPayment: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}/payments`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  addESF: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}/esf`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  listEvidence: (contractId?: string) => {
     const qs = contractId ? `?contract_id=${contractId}` : "";
-    const r = await authedFetch(`/api/evidence${qs}`);
-    if (!r.ok) throw new Error("evidence failed");
-    return r.json();
+    return authedFetch(`/api/evidence${qs}`).then(jsonOrThrow);
   },
-  async getEvidence(id: string) {
-    const r = await authedFetch(`/api/evidence/${id}`);
-    if (!r.ok) throw new Error("evidence failed");
-    return r.json();
-  },
-  async createEvidence(body: any) {
-    const r = await authedFetch(`/api/evidence`, { method: "POST", body: JSON.stringify(body) });
-    if (!r.ok) throw new Error("create evidence failed");
-    return r.json();
-  },
-  async aiAnalyze(body: { contract_id?: string; contract_text: string }) {
-    const r = await authedFetch(`/api/ai/analyze`, { method: "POST", body: JSON.stringify(body) });
-    if (!r.ok) throw new Error("ai analyze failed");
-    return r.json();
-  },
+  getEvidence: (id: string) => authedFetch(`/api/evidence/${id}`).then(jsonOrThrow),
+  createEvidence: (body: any) =>
+    authedFetch(`/api/evidence`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  aiAnalyze: (body: { contract_id?: string; contract_text: string }) =>
+    authedFetch(`/api/ai/analyze`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
 };
