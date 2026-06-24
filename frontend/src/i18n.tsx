@@ -461,28 +461,36 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    const timeout = setTimeout(() => { if (!cancelled) setReady(true); }, 1500);
     (async () => {
       try {
-        const saved = await storage.getItem("conexia_lang");
+        let saved: string | null = null;
+        try { saved = await storage.getItem("conexia_lang"); } catch { /* ignore */ }
         if (saved === "es" || saved === "en") {
-          setLangState(saved);
+          if (!cancelled) setLangState(saved);
         } else {
-          // Auto-detect
-          let code: string = "es";
+          let code = "es";
           try {
-            const locales = Localization.getLocales?.();
             if (Platform.OS === "web") {
-              code = (navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es";
-            } else if (locales && locales.length > 0) {
-              code = (locales[0].languageCode || "es").toLowerCase().startsWith("en") ? "en" : "es";
+              code = (typeof navigator !== "undefined" && navigator.language && navigator.language.toLowerCase().startsWith("en")) ? "en" : "es";
+            } else {
+              const locales = Localization.getLocales?.();
+              if (locales && locales.length > 0) {
+                code = (locales[0].languageCode || "es").toLowerCase().startsWith("en") ? "en" : "es";
+              }
             }
           } catch { /* ignore */ }
-          setLangState(code === "en" ? "en" : "es");
+          if (!cancelled) setLangState(code === "en" ? "en" : "es");
         }
       } finally {
-        setReady(true);
+        if (!cancelled) {
+          clearTimeout(timeout);
+          setReady(true);
+        }
       }
     })();
+    return () => { cancelled = true; clearTimeout(timeout); };
   }, []);
 
   const setLang = useCallback((l: Lang) => {
@@ -501,7 +509,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return s;
   }, [lang]);
 
-  if (!ready) return null;
+  if (!ready) {
+    // While bootstrapping, render with defaults so the UI never freezes on a blank screen.
+    return <I18nCtx.Provider value={{ lang: "es", t: (k) => (dict.es as Record<string, string>)[k] ?? k, setLang }}>{children}</I18nCtx.Provider>;
+  }
   return <I18nCtx.Provider value={{ lang, t, setLang }}>{children}</I18nCtx.Provider>;
 }
 

@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only verification for Conexia CLM web preview after I18nProvider hardening (iteration 4). Tested against the public URL https://contract-forge-35.preview.emergentagent.com on a 390x844 mobile viewport. Preview is reachable and the login screen renders well within 10s (≈3s observed). All 13 required login elements are visible: conexia-logo, tagline 'Contract Lifecycle Management', subtle 'Auditable. Mobile. Enterprise.', tab-signin/tab-signup, input-email/input-password, email-submit-button, the 5 OAuth provider buttons (google/microsoft/apple/yahoo/sso), demo-login-button and lang-switch (ES/EN toggle). Tapping 'Enter demo mode' calls POST /api/auth/dev-login and navigates to the dashboard which correctly shows: greeting 'Hello, Demo', CRITICAL ALERT (Consultoría Legal Internacional, expires in 4d), Financial KPIs (Total Value $21.94M / 10 contracts, Executed $3.47M, Retention $1.097M, Penalties $47k), Expiration Semaphore with 3 entries, and Recent contracts list. Bottom-tab navigation works: Panel/Contracts/Evidence/Profile are all rendered; Contracts screen shows 'New' button + category chips (All, Goods, Works, Non-Consultancy Services, ...) and contract cards with status pills (FIRMADO/BORRADOR/ACTIVO), risk chips, and full label set (CONSULTANT/PRODUCT/SCHED./DELIVERY/% PAID/VALUE). Zero console errors and zero pageerror events were captured. Two non-blocking React-Native-Web deprecation warnings observed (informational, originate from RN-Web internals): 'shadow* style props are deprecated' and 'props.pointerEvents is deprecated'. No deprecated Expo packages found in /app/frontend usage. The defensive I18nProvider fix in /app/frontend/src/i18n.tsx (1.5s timeout + render-with-defaults during bootstrap) is sound and does not block render; preview never produced a blank screen during 3 reload cycles.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login (mobile 390px)", "issues": ["Cosmetic only: provider buttons show '· config' hint right-aligned; on very narrow viewports the label can crowd the hint. Not a blocker."]}
+    ],
+    "react_native_issues": [
+      {"component": "react-native-web (transitive)", "issue": "Console warning 'shadow* style props are deprecated. Use boxShadow.' — emitted from RN-Web internals (likely Stack/Tab navigator shadow styles). Not blocking; consider migrating any custom shadow* styles to boxShadow when targeting web."},
+      {"component": "react-native-web (transitive)", "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — emitted from a Pressable/View on web. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_4.json",
+    "/app/backend/tests/test_conexia_clm.py (pre-existing backend regression suite, not re-run this iteration)"
+  ],
+  "action_items": [
+    "(Optional / non-blocking) Track down the source of the 'shadow*' and 'props.pointerEvents' warnings and migrate to boxShadow / style.pointerEvents to silence the console on web.",
+    "(Optional) After demo login the device locale resolves to English on the test runner (navigator.language=en). Verify on Spanish browsers the default remains 'es' (logic already handles this in i18n.tsx)."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/i18n.tsx: I18nProvider correctly clears the bootstrap timeout in the finally block and on unmount; render-with-defaults path uses Spanish dict + memoized t() — safe.",
+    "/app/frontend/app/_layout.tsx: still returns null until icon fonts load (useIconFonts). This is a separate gating point from i18n; if icon fonts ever fail to register, the splash stays. Consider an equivalent 1.5–3s safety timeout here too so the UI cannot hang on a font-load network blip.",
+    "/app/frontend/app/login.tsx: well structured, all interactive elements have testID, KeyboardAvoidingView + ScrollView correct, demo flow uses api.devLogin()+saveToken()+signInWithToken() — matches review intent.",
+    "Demo data: 'Recent' list shows TEST_Lifecycle V2 / TEST_Contract V2 prepended to seed contracts because the backend seed is idempotent and prior test runs left TEST_ records in MongoDB. Not a bug, but consider scoping TEST_* contracts out of the demo dashboard or cleaning them after tests."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not retested this iteration (last 100% — 26/26)", "frontend": "100% (5/5 review items verified)"},
+  "seed_data_creation": "None created this iteration. Used existing demo session via /api/auth/dev-login (demo@conexia.io). Seed v2 dataset already present from prior iterations.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public preview URL is healthy. Login screen renders in ~3s on a cold load. The I18nProvider hardening (1.5s timeout fallback + render-with-defaults) is verified to not block rendering — preview never blanked. All testIDs on the login screen match the source. For dashboard testing, tab labels are localized: ES = Panel/Contratos/Evidencias/Perfil, EN = Panel/Contracts/Evidence/Profile (Panel is the same in both). Use the lang-switch testID to toggle. TEST_ contracts from previous backend runs are still in the DB and show in 'Recent'.",
+  "rca_of_issue": "Original user report 'no puedo ver el preview' could not be reproduced. The preview consistently returns the login screen in under 4 seconds with all expected testIDs. The defensive change to /app/frontend/src/i18n.tsx (1.5s bootstrap timeout + render-with-default-Spanish-dict instead of returning null) is correct: it removes a potential blank-screen failure mode if storage.getItem('conexia_lang') or expo-localization were ever to hang. The user's symptom was most likely transient (network, in-flight bundler reload, or a previous version cached in their browser). No functional defect remains in the rendering path."
+}
