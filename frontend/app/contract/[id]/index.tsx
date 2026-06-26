@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl, Platform } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl, Platform, Modal, Linking } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as MailComposer from "expo-mail-composer";
 
 import { api } from "@/src/api";
 import { useT } from "@/src/i18n";
@@ -64,12 +66,8 @@ export default function ContractDetail() {
         const url = URL.createObjectURL(blob);
         const win = window.open(url, "_blank");
         if (win) {
-          // Wait briefly for content to render, then trigger print dialog
-          setTimeout(() => {
-            try { win.focus(); win.print(); } catch { /* ignore */ }
-          }, 500);
+          setTimeout(() => { try { win.focus(); win.print(); } catch { /* ignore */ } }, 500);
         } else {
-          // Popup blocked — fall back to download
           const a = document.createElement("a");
           a.href = url;
           a.download = `conexia-${data?.contract_number || id}.html`;
@@ -89,6 +87,105 @@ export default function ContractDetail() {
     } finally {
       setPdfBusy(false);
     }
+  }
+
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareInfo, setShareInfo] = useState<{ url: string; title: string; num: string; counterparty: string } | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
+
+  async function openShare() {
+    if (!id) return;
+    setShareOpen(true);
+    setShareBusy(true);
+    setShareToast(null);
+    try {
+      const res = await api.createShareLink(id as string);
+      setShareInfo({
+        url: api.publicShareUrl(res.token),
+        title: res.title || data?.title || "Contrato",
+        num: res.contract_number || data?.contract_number || (id as string),
+        counterparty: res.counterparty || data?.counterparty || "",
+      });
+    } catch (e: any) {
+      setShareToast(t("detail.download.err"));
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function shareEmail() {
+    if (!shareInfo) return;
+    const subject = t("detail.share.emailSubject", { num: shareInfo.num, title: shareInfo.title });
+    const body = t("detail.share.emailBody", { num: shareInfo.num, title: shareInfo.title, counterparty: shareInfo.counterparty, url: shareInfo.url });
+    if (Platform.OS === "web") {
+      const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailto, "_self");
+      return;
+    }
+    try {
+      const available = await MailComposer.isAvailableAsync();
+      let attachments: string[] = [];
+      try {
+        const html = await api.contractDocumentHtml(id as string);
+        const { uri } = await Print.printToFileAsync({ html });
+        attachments = [uri];
+      } catch { /* attach optional */ }
+      if (available) {
+        await MailComposer.composeAsync({ subject, body, attachments, isHtml: false });
+      } else {
+        Linking.openURL(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+      }
+    } catch (e: any) {
+      console.warn("mail", e);
+      setShareToast(t("detail.download.err"));
+    }
+  }
+
+  async function shareWhatsApp() {
+    if (!shareInfo) return;
+    const msg = t("detail.share.waMsg", { num: shareInfo.num, title: shareInfo.title, counterparty: shareInfo.counterparty, url: shareInfo.url });
+    if (Platform.OS === "web") {
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+      return;
+    }
+    const native = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    const fallback = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    try {
+      const can = await Linking.canOpenURL(native);
+      await Linking.openURL(can ? native : fallback);
+    } catch {
+      Linking.openURL(fallback);
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareInfo) return;
+    try {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareInfo.url);
+      } else {
+        await Clipboard.setStringAsync(shareInfo.url);
+      }
+      setShareToast(t("detail.share.copied"));
+      setTimeout(() => setShareToast(null), 2200);
+    } catch (e) { console.warn(e); }
+  }
+
+  async function shareSystem() {
+    if (!shareInfo) return;
+    if (Platform.OS === "web") {
+      // fallback to copy
+      copyShareLink();
+      return;
+    }
+    try {
+      const html = await api.contractDocumentHtml(id as string);
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: shareInfo.title, UTI: "com.adobe.pdf" });
+      }
+    } catch (e) { console.warn(e); }
   }
 
   if (loading || !data) {
@@ -138,20 +235,26 @@ export default function ContractDetail() {
           </View>
         ) : null}
 
-        {/* Download/Print button */}
-        <Pressable style={styles.downloadCta} onPress={downloadOrPrint} disabled={pdfBusy} testID="download-print-cta">
-          {pdfBusy ? (
-            <>
-              <ActivityIndicator color="#FFF" size="small" />
-              <Text style={styles.downloadCtaText}>{t("detail.download.busy")}</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="print-outline" size={18} color="#FFF" />
-              <Text style={styles.downloadCtaText}>{t("detail.download")}</Text>
-            </>
-          )}
-        </Pressable>
+        {/* Download/Print + Share buttons */}
+        <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg }}>
+          <Pressable style={[styles.downloadCta, { flex: 1, marginTop: 0 }]} onPress={downloadOrPrint} disabled={pdfBusy} testID="download-print-cta">
+            {pdfBusy ? (
+              <>
+                <ActivityIndicator color="#FFF" size="small" />
+                <Text style={styles.downloadCtaText}>{t("detail.download.busy")}</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="print-outline" size={18} color="#FFF" />
+                <Text style={styles.downloadCtaText}>{t("detail.download")}</Text>
+              </>
+            )}
+          </Pressable>
+          <Pressable style={styles.shareCta} onPress={openShare} testID="share-cta">
+            <Ionicons name="share-social-outline" size={18} color="#FFF" />
+            <Text style={styles.downloadCtaText}>{t("detail.share")}</Text>
+          </Pressable>
+        </View>
         {pdfErr ? <Text style={{ color: colors.error, fontSize: 11, marginTop: 4 }}>{pdfErr}</Text> : null}
 
         {/* Financial KPIs */}
@@ -323,6 +426,47 @@ export default function ContractDetail() {
           <Text style={styles.addBtnText}>{t("detail.addAddendum")}</Text>
         </Pressable>
       </ScrollView>
+
+      {/* Share modal */}
+      <Modal visible={shareOpen} transparent animationType="slide" onRequestClose={() => setShareOpen(false)}>
+        <Pressable style={shareStyles.backdrop} onPress={() => setShareOpen(false)} />
+        <View style={shareStyles.sheet} testID="share-sheet">
+          <View style={shareStyles.handle} />
+          <Text style={shareStyles.title}>{t("detail.share.title")}</Text>
+          {shareBusy || !shareInfo ? (
+            <ActivityIndicator color={colors.brandPrimary} style={{ marginVertical: 24 }} />
+          ) : (
+            <>
+              <View style={shareStyles.linkBox}>
+                <Ionicons name="link-outline" size={14} color={colors.brandPrimary} />
+                <Text style={shareStyles.linkText} numberOfLines={1}>{shareInfo.url}</Text>
+              </View>
+              <Text style={shareStyles.validHint}>{t("detail.share.linkValid")}</Text>
+
+              <Pressable style={[shareStyles.row, shareStyles.rowWa]} onPress={shareWhatsApp} testID="share-whatsapp">
+                <Ionicons name="logo-whatsapp" size={22} color="#FFF" />
+                <Text style={shareStyles.rowText}>{t("detail.share.whatsapp")}</Text>
+              </Pressable>
+              <Pressable style={[shareStyles.row, shareStyles.rowMail]} onPress={shareEmail} testID="share-email">
+                <Ionicons name="mail-outline" size={20} color="#FFF" />
+                <Text style={shareStyles.rowText}>{t("detail.share.email")}</Text>
+              </Pressable>
+              <Pressable style={[shareStyles.row, shareStyles.rowCopy]} onPress={copyShareLink} testID="share-copy">
+                <Ionicons name="copy-outline" size={18} color={colors.brandPrimary} />
+                <Text style={[shareStyles.rowText, { color: colors.brandPrimary }]}>{t("detail.share.copy")}</Text>
+              </Pressable>
+              <Pressable style={[shareStyles.row, shareStyles.rowCopy]} onPress={shareSystem} testID="share-system">
+                <Ionicons name="share-social-outline" size={18} color={colors.brandPrimary} />
+                <Text style={[shareStyles.rowText, { color: colors.brandPrimary }]}>{t("detail.share.system")}</Text>
+              </Pressable>
+              {shareToast ? <Text style={shareStyles.toast}>{shareToast}</Text> : null}
+            </>
+          )}
+          <Pressable style={shareStyles.close} onPress={() => setShareOpen(false)} testID="share-close">
+            <Text style={shareStyles.closeText}>{t("cancel")}</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -373,6 +517,7 @@ const styles = StyleSheet.create({
   obsText: { fontSize: 12, color: colors.onSurface, marginTop: 2 },
   printBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: colors.brandTertiary },
   downloadCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.brandSecondary, paddingVertical: 12, borderRadius: radius.md, marginTop: spacing.lg },
+  shareCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.brandPrimary, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.md },
   downloadCtaText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   pillText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
@@ -425,4 +570,22 @@ const subStyles = StyleSheet.create({
   subTitle: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
   subMeta: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 2 },
   subDesc: { fontSize: 11, color: colors.onSurface, marginTop: 4, fontStyle: "italic" },
+});
+
+const shareStyles = StyleSheet.create({
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(13,20,20,0.5)" },
+  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "#FFF", padding: spacing.lg, paddingBottom: spacing.xl + 16, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 8 },
+  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: spacing.md },
+  title: { fontSize: 18, fontWeight: "800", color: colors.onSurface, marginBottom: spacing.sm },
+  linkBox: { flexDirection: "row", alignItems: "center", gap: 6, padding: 10, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  linkText: { flex: 1, fontSize: 11, color: colors.onSurface, fontFamily: font.mono },
+  validHint: { fontSize: 10, color: colors.onSurfaceSecondary, fontStyle: "italic", marginBottom: spacing.sm },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: radius.md, marginTop: 6 },
+  rowWa: { backgroundColor: "#25D366" },
+  rowMail: { backgroundColor: colors.brandPrimary },
+  rowCopy: { backgroundColor: colors.brandTertiary },
+  rowText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  toast: { textAlign: "center", padding: 8, color: colors.success, fontSize: 12, fontWeight: "700" },
+  close: { padding: 14, alignItems: "center", marginTop: spacing.sm },
+  closeText: { color: colors.onSurfaceSecondary, fontWeight: "600" },
 });

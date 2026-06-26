@@ -45,7 +45,8 @@
           "backgroundColor": "#FFFFFF"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-mail-composer"
     ],
     "experiments": {
       "typedRoutes": true

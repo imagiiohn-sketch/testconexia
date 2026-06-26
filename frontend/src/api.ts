@@ -103,4 +103,10 @@ export const api = {
     if (!r.ok) throw new Error("document failed");
     return r.text();
   },
+  createShareLink: async (id: string): Promise<{ token: string; expires_at: string; title?: string; contract_number?: string; counterparty?: string }> => {
+    const r = await authedFetch(`/api/contracts/${id}/share-link`, { method: "POST" });
+    if (!r.ok) throw new Error("share link failed");
+    return r.json();
+  },
+  publicShareUrl: (token: string) => `${BASE}/api/share/${token}`,
 };

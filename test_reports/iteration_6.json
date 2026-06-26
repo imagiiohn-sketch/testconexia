@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 6 - Share contract via WhatsApp/Email feature fully validated. Backend: 35/35 pytest tests passed (5 new share-link tests + 30 regression). Frontend: contract detail shows both download-print-cta and share-cta; share-sheet opens with all 5 option testIDs (whatsapp/email/copy/system/close), displays the share URL and the 'Link valid for 7 days' hint. Only minor issue: 'Link copied' toast did not render after tapping share-copy in the cross-origin preview iframe — the underlying navigator.clipboard.writeText likely throws and the catch silently swallows it without surfacing feedback.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "copyShareLink (contract/[id]/index.tsx:162-173)",
+        "issue": "When navigator.clipboard.writeText rejects (e.g. preview iframe, permissions error), the catch only calls console.warn — no user feedback. The 'Link copied' toast never appears in those cases. Suggest either (a) fallback to document.execCommand('copy') with a hidden textarea, or (b) still call setShareToast with a 'Copy failed, long-press the URL above' message inside the catch.",
+        "testID": "share-copy",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_share_links.py",
+    "/app/backend/tests/test_conexia_clm.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, LOW) Improve copyShareLink fallback so a toast (success or failure) is always shown even when navigator.clipboard.writeText throws in sandboxed contexts."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1158 lines — approaching the 700-line guideline; consider splitting into routers/auth.py, routers/contracts.py, routers/share.py, services/html_render.py for maintainability.",
+    "share_links has a TTL index (expireAfterSeconds=0) on expires_at — good. Tokens use uuid4 hex with 'sh_' prefix (~128 bits entropy) which is acceptable for 7-day public read-only links.",
+    "Public /api/share/{token} endpoint correctly returns 404 (not 401) for invalid tokens and renders the same HTML with a shared-by banner injected — no auth leakage."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_share_links.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (35/35)",
+    "frontend": "~95% (10/11 UI checks; only copy-toast feedback missing in iframe preview)"
+  },
+  "seed_data_creation": "Used existing /api/seed (6 demo contracts, idempotent). No new seed required.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 6 introduced share-link feature. Backend POST /api/contracts/{id}/share-link returns {token, expires_at, contract_id, title, contract_number, counterparty} and GET /api/share/{token} returns public HTML with banner 'CONEXIA · Documento compartido por …'. Frontend testIDs: share-cta, share-sheet, share-whatsapp, share-email, share-copy, share-system, share-close. Demo login button label is 'Enter demo mode' / 'Entrar en modo demo' (no testID — selectors should rely on text or be given a testID). The contract cards in the list view also have no testID prefix matching contract-card-*; selectors fall back to title text. Adding testID='demo-mode-btn' on the demo button and testID={`contract-card-${id}`} on each list item would harden e2e tests.",
+  "rca_of_issue": "Copy-link toast invisible in preview iframe — RCA: copyShareLink wraps clipboard write in try/catch; when navigator.clipboard.writeText rejects (Permissions Policy 'clipboard-write' blocked in cross-origin iframe sandbox), execution jumps to catch which only console.warns — setShareToast is never called. Reproduction: open preview URL in an iframe context, open share sheet, tap Copy link, observe no toast. Mitigation: move setShareToast(success) before the await or surface the error in the catch path; alternatively add an execCommand('copy') fallback."
+}

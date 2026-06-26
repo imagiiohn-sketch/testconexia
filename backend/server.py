@@ -683,6 +683,61 @@ async def contract_document(contract_id: str, user=Depends(get_current_user)):
                          headers={"Cache-Control": "no-store"})
 
 
+# ---------- Public share links ----------
+@api.post("/contracts/{contract_id}/share-link")
+async def create_share_link(contract_id: str, user=Depends(get_current_user)):
+    c = await db.contracts.find_one({"contract_id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Contract not found")
+    token = f"sh_{uuid.uuid4().hex}"
+    expires = now_utc() + timedelta(days=7)
+    await db.share_links.insert_one({
+        "token": token,
+        "contract_id": contract_id,
+        "created_by": user["user_id"],
+        "created_by_name": user["name"],
+        "created_at": now_utc(),
+        "expires_at": expires,
+    })
+    return {
+        "token": token,
+        "expires_at": iso(expires),
+        "contract_id": contract_id,
+        "title": c.get("title"),
+        "contract_number": c.get("contract_number"),
+        "counterparty": c.get("counterparty"),
+    }
+
+
+@api.get("/share/{token}", response_class=HTMLResponse)
+async def public_share(token: str):
+    rec = await db.share_links.find_one({"token": token}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Share link not found or revoked")
+    expires_at = rec.get("expires_at")
+    if isinstance(expires_at, datetime):
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now_utc():
+            raise HTTPException(410, "Share link expired")
+    c = await db.contracts.find_one({"contract_id": rec["contract_id"]}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Contract not found")
+    c["status"] = compute_status(c)
+    c["risk_level"] = compute_risk(c)
+    addenda = [a async for a in db.contracts.find({"parent_contract_id": rec["contract_id"]}, {"_id": 0})]
+    html = render_contract_html(c, addenda)
+    # add a small banner indicating this is a shared read-only view
+    banner = (
+        f'<div style="background:#1f4a4a;color:#fff;padding:10px 16px;'
+        f'font-family:system-ui;font-size:12px;letter-spacing:0.4px;">'
+        f'CONEXIA · Documento compartido por {rec.get("created_by_name","—")} · Solo lectura · '
+        f'Válido hasta {iso(expires_at)}</div>'
+    )
+    html = html.replace("<body>", f"<body>{banner}", 1)
+    return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "no-store"})
+
+
 @api.post("/contracts/{contract_id}/workflow")
 async def workflow_decision(contract_id: str, decision: WorkflowDecision,
                              user=Depends(get_current_user)):
@@ -1089,6 +1144,11 @@ async def on_startup():
     await db.contracts.create_index("category")
     await db.evidence.create_index("evidence_id", unique=True)
     await db.evidence.create_index("contract_id")
+    await db.share_links.create_index("token", unique=True)
+    try:
+        await db.share_links.create_index("expires_at", expireAfterSeconds=0)
+    except Exception:
+        pass
     log.info("Conexia CLM v2 ready.")
 
 
