@@ -439,6 +439,250 @@ async def get_contract(contract_id: str, user=Depends(get_current_user)):
     return out
 
 
+def _fmt_money(v, cur="USD") -> str:
+    try:
+        return f"{cur} {float(v or 0):,.2f}"
+    except Exception:
+        return f"{cur} 0.00"
+
+
+def _fmt_date(v) -> str:
+    if not v:
+        return "—"
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d")
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v.replace("Z", "+00:00")).strftime("%Y-%m-%d")
+        except Exception:
+            return v[:10]
+    return str(v)
+
+
+CAT_LABEL = {
+    "bienes": "Bienes", "obras": "Obras",
+    "servicios_no_consultoria": "Servicios No Consultoría",
+    "consultor_individual": "Consultor Individual",
+    "firma_consultora": "Firma Consultora",
+    "acuerdo_marco": "Acuerdo Marco",
+}
+STATUS_LABEL = {
+    "draft": "Borrador", "in_review": "En Revisión", "approved": "Aprobado",
+    "signed": "Firmado", "active": "Activo", "expiring": "Por Vencer", "closed": "Cerrado",
+}
+RISK_LABEL = {"low": "Bajo", "medium": "Medio", "high": "Alto"}
+WF_LABEL = {"legal": "Legal", "finance": "Finanzas", "operations": "Operaciones", "direction": "Dirección"}
+
+
+def render_contract_html(c: dict, addenda: list) -> str:
+    title = c.get("title", "")
+    cnum = c.get("contract_number") or c.get("contract_id")
+    counterparty = c.get("counterparty", "")
+    desc = c.get("description") or ""
+    cur = c.get("currency", "USD")
+    cat = CAT_LABEL.get(c.get("category", ""), c.get("category", "—"))
+    status = STATUS_LABEL.get(c.get("status", "draft"), c.get("status", "—"))
+    risk = RISK_LABEL.get(c.get("risk_level", "low"), c.get("risk_level", "—"))
+    observations = c.get("observations") or ""
+    timeline = c.get("timeline") or []
+    workflow = c.get("workflow") or []
+    risks = c.get("risks") or []
+    mods = c.get("modifications") or []
+    pays = c.get("payments") or []
+    esfs = c.get("esf_items") or []
+
+    def row(label, value):
+        return f'<tr><td class="lbl">{label}</td><td>{value}</td></tr>'
+
+    wf_rows = "".join(
+        f'<tr><td>{WF_LABEL.get(s.get("step",""), s.get("step",""))}</td>'
+        f'<td>{STATUS_LABEL.get(s.get("status","pending"), s.get("status","—"))}</td>'
+        f'<td>{s.get("approver_name") or "—"}</td>'
+        f'<td>{_fmt_date(s.get("decided_at"))}</td></tr>'
+        for s in workflow
+    ) or '<tr><td colspan="4" class="empty">Sin pasos de aprobación</td></tr>'
+
+    risk_rows = "".join(
+        f'<tr><td>{r.get("risk","")}</td><td>{RISK_LABEL.get(r.get("probability","low"),"—")}</td>'
+        f'<td>{RISK_LABEL.get(r.get("impact","low"),"—")}</td><td>{r.get("mitigation","")}</td>'
+        f'<td>{r.get("responsible","")}</td><td>{STATUS_LABEL.get(r.get("status",""), r.get("status",""))}</td></tr>'
+        for r in risks
+    ) or '<tr><td colspan="6" class="empty">Sin riesgos registrados</td></tr>'
+
+    mod_rows = "".join(
+        f'<tr><td>{m.get("type","")}</td><td>{_fmt_date(m.get("date"))}</td>'
+        f'<td>{_fmt_money(m.get("amount",0), cur)}</td><td>{m.get("days",0)}</td>'
+        f'<td>{m.get("justification","")}</td>'
+        f'<td>{STATUS_LABEL.get(m.get("approval",""), m.get("approval",""))}</td></tr>'
+        for m in mods
+    ) or '<tr><td colspan="6" class="empty">Sin modificaciones</td></tr>'
+
+    pay_rows = "".join(
+        f'<tr><td>{p.get("invoice","")}</td><td>{_fmt_date(p.get("date"))}</td>'
+        f'<td>{_fmt_money(p.get("amount",0), cur)}</td>'
+        f'<td>{p.get("deliverable","")}</td>'
+        f'<td>{STATUS_LABEL.get(p.get("status",""), p.get("status",""))}</td></tr>'
+        for p in pays
+    ) or '<tr><td colspan="5" class="empty">Sin pagos registrados</td></tr>'
+
+    esf_rows = "".join(
+        f'<tr><td>{e.get("requirement","")}</td><td>{"Sí" if e.get("compliant") else "No"}</td>'
+        f'<td>{_fmt_date(e.get("verification_date"))}</td>'
+        f'<td>{e.get("observations","")}</td></tr>'
+        for e in esfs
+    ) or '<tr><td colspan="4" class="empty">Sin requisitos ESF</td></tr>'
+
+    add_rows = "".join(
+        f'<tr><td>{a.get("title","")}</td>'
+        f'<td>{_fmt_money(a.get("value_delta",0), cur)}</td>'
+        f'<td>{a.get("end_date_delta_days",0)}</td>'
+        f'<td>{_fmt_date(a.get("created_at"))}</td></tr>'
+        for a in addenda
+    ) or '<tr><td colspan="4" class="empty">Sin adendas</td></tr>'
+
+    timeline_rows = "".join(
+        f'<tr><td>{_fmt_date(t.get("at"))}</td><td>{t.get("actor_name","—")}</td>'
+        f'<td>{t.get("kind","")}</td><td>{t.get("message","")}</td></tr>'
+        for t in (timeline[-20:] if len(timeline) > 20 else timeline)
+    )
+
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    return f"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>{title} — {cnum}</title>
+<style>
+  @page {{ size: A4; margin: 18mm 14mm; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0d1414; margin: 0; padding: 24px; }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #1f4a4a; padding-bottom: 12px; margin-bottom: 18px; }}
+  .brand {{ color: #1f4a4a; letter-spacing: 3px; font-weight: 800; font-size: 22px; }}
+  .brand small {{ display: block; letter-spacing: 2px; font-size: 9px; color: #465454; font-weight: 600; margin-top: 4px; }}
+  .meta {{ text-align: right; font-size: 10px; color: #465454; }}
+  h1 {{ font-size: 22px; margin: 6px 0; color: #0d1414; }}
+  .sub {{ color: #465454; font-size: 13px; }}
+  .pills {{ margin: 10px 0 18px; }}
+  .pill {{ display: inline-block; padding: 4px 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; border-radius: 999px; margin-right: 6px; background: #e2ecec; color: #1f4a4a; }}
+  .pill.risk-high {{ background: #ffd9d9; color: #8c1f1f; }}
+  .pill.risk-med {{ background: #ffe8cc; color: #a14a00; }}
+  .pill.risk-low {{ background: #d6f5d6; color: #176b17; }}
+  h2 {{ font-size: 12px; letter-spacing: 1.5px; color: #1f4a4a; margin: 22px 0 8px; border-bottom: 1px solid #d8e0e0; padding-bottom: 4px; text-transform: uppercase; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 10px; }}
+  th, td {{ text-align: left; padding: 6px 8px; border-bottom: 1px solid #e7ebeb; vertical-align: top; }}
+  th {{ background: #f4f6f6; font-size: 10px; color: #465454; letter-spacing: 0.6px; text-transform: uppercase; }}
+  .kv {{ width: 100%; }}
+  .kv td.lbl {{ width: 30%; color: #465454; font-weight: 600; font-size: 11px; letter-spacing: 0.4px; }}
+  .empty {{ text-align: center; color: #97a4a4; font-style: italic; padding: 10px; }}
+  .footer {{ margin-top: 28px; padding-top: 10px; border-top: 1px solid #d8e0e0; font-size: 9px; color: #465454; display: flex; justify-content: space-between; }}
+  .desc {{ background: #f4f6f6; border-left: 3px solid #1f4a4a; padding: 10px 12px; font-size: 12px; color: #1f2b2b; border-radius: 4px; margin-bottom: 12px; }}
+  @media print {{ body {{ padding: 0; }} }}
+</style></head>
+<body>
+  <div class="header">
+    <div class="brand">CONEXIA<small>Contract Lifecycle Management</small></div>
+    <div class="meta">Documento generado<br><strong>{generated}</strong><br>{cnum}</div>
+  </div>
+
+  <h1>{title}</h1>
+  <div class="sub">{counterparty}</div>
+  <div class="pills">
+    <span class="pill">{cat.upper()}</span>
+    <span class="pill">{status.upper()}</span>
+    <span class="pill risk-{c.get('risk_level','low') if c.get('risk_level') in ('high','medium','low') else 'low'}">RIESGO {risk.upper()}</span>
+  </div>
+
+  {f'<div class="desc">{desc}</div>' if desc else ''}
+
+  <h2>Información Contractual</h2>
+  <table class="kv">
+    {row("N° Contrato", cnum)}
+    {row("Consultor / Contratista", c.get("consultant") or "—")}
+    {row("Producto / Entregable", c.get("product") or "—")}
+    {row("Categoría", cat)}
+    {row("Departamento", c.get("department") or "—")}
+    {row("Moneda", cur)}
+    {row("Fecha Inicio", _fmt_date(c.get("start_date")))}
+    {row("Fecha Programada", _fmt_date(c.get("scheduled_date")))}
+    {row("Fecha Entrega", _fmt_date(c.get("delivery_date") or c.get("end_date")))}
+    {row("Fecha Vencimiento", _fmt_date(c.get("end_date")))}
+  </table>
+
+  <h2>Indicadores Financieros</h2>
+  <table class="kv">
+    {row("Monto Total", _fmt_money(c.get("total_value",0), cur))}
+    {row("Ejecutado", _fmt_money(c.get("executed_value",0), cur))}
+    {row("Saldo", _fmt_money(float(c.get("total_value",0) or 0) - float(c.get("executed_value",0) or 0), cur))}
+    {row("Retención (5%)", _fmt_money(c.get("retention_value",0), cur))}
+    {row("Multas / Penalidades", _fmt_money(c.get("penalty_value",0), cur))}
+    {row("% Pago", str(c.get("pay_pct", 0)) + "%")}
+  </table>
+
+  {f'<h2>Observaciones</h2><div class="desc">{observations}</div>' if observations else ''}
+
+  <h2>Flujo de Aprobación</h2>
+  <table>
+    <thead><tr><th>Paso</th><th>Estado</th><th>Aprobador</th><th>Decidido</th></tr></thead>
+    <tbody>{wf_rows}</tbody>
+  </table>
+
+  <h2>Matriz de Riesgos</h2>
+  <table>
+    <thead><tr><th>Riesgo</th><th>Probab.</th><th>Impacto</th><th>Mitigación</th><th>Responsable</th><th>Estado</th></tr></thead>
+    <tbody>{risk_rows}</tbody>
+  </table>
+
+  <h2>Modificaciones</h2>
+  <table>
+    <thead><tr><th>Tipo</th><th>Fecha</th><th>Monto Δ</th><th>Días Δ</th><th>Justificación</th><th>Aprobación</th></tr></thead>
+    <tbody>{mod_rows}</tbody>
+  </table>
+
+  <h2>Pagos</h2>
+  <table>
+    <thead><tr><th>Factura</th><th>Fecha</th><th>Monto</th><th>Entregable</th><th>Estado</th></tr></thead>
+    <tbody>{pay_rows}</tbody>
+  </table>
+
+  <h2>ESF Ambiental-Social</h2>
+  <table>
+    <thead><tr><th>Requisito</th><th>Cumple</th><th>Fecha Verificación</th><th>Observaciones</th></tr></thead>
+    <tbody>{esf_rows}</tbody>
+  </table>
+
+  <h2>Adendas</h2>
+  <table>
+    <thead><tr><th>Título</th><th>Monto Δ</th><th>Días Δ</th><th>Creada</th></tr></thead>
+    <tbody>{add_rows}</tbody>
+  </table>
+
+  <h2>Línea de Tiempo (últimos 20 eventos)</h2>
+  <table>
+    <thead><tr><th>Fecha</th><th>Usuario</th><th>Tipo</th><th>Mensaje</th></tr></thead>
+    <tbody>{timeline_rows or '<tr><td colspan="4" class="empty">Sin eventos</td></tr>'}</tbody>
+  </table>
+
+  <div class="footer">
+    <span>CONEXIA CLM · Documento de gestión interna</span>
+    <span>Generado por sistema · No requiere firma para validez</span>
+  </div>
+</body></html>"""
+
+
+from fastapi.responses import HTMLResponse
+
+
+@api.get("/contracts/{contract_id}/document", response_class=HTMLResponse)
+async def contract_document(contract_id: str, user=Depends(get_current_user)):
+    c = await db.contracts.find_one({"contract_id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Contract not found")
+    c["status"] = compute_status(c)
+    c["risk_level"] = compute_risk(c)
+    addenda = [a async for a in db.contracts.find({"parent_contract_id": contract_id}, {"_id": 0})]
+    html = render_contract_html(c, addenda)
+    return HTMLResponse(content=html, status_code=200,
+                         headers={"Cache-Control": "no-store"})
+
+
 @api.post("/contracts/{contract_id}/workflow")
 async def workflow_decision(contract_id: str, decision: WorkflowDecision,
                              user=Depends(get_current_user)):

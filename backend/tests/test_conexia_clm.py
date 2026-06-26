@@ -389,3 +389,73 @@ class TestAI:
         for k in ("summary", "key_dates", "financial_obligations", "risk_clauses", "overall_risk"):
             assert k in d
         assert d["overall_risk"] in ("low", "medium", "high")
+
+
+# ---------- Iteration 5: Contract Document (HTML download/print) ----------
+class TestContractDocument:
+    """GET /api/contracts/{id}/document returns printable HTML for download/print feature."""
+
+    REQUIRED_SECTIONS = (
+        "Información Contractual",
+        "Indicadores Financieros",
+        "Flujo de Aprobación",
+        "Matriz de Riesgos",
+        "Modificaciones",
+        "Pagos",
+        "ESF Ambiental-Social",
+        "Adendas",
+        "Línea de Tiempo",
+    )
+
+    def test_document_requires_auth_401(self, session, auth):
+        # pick any seeded contract id
+        items = session.get(f"{API}/contracts", headers=auth["headers"], timeout=15).json()
+        assert items, "no contracts seeded"
+        cid = items[0]["contract_id"]
+        # no Authorization header
+        r = requests.get(f"{API}/contracts/{cid}/document", timeout=20)
+        assert r.status_code in (401, 403), f"expected 401/403, got {r.status_code}"
+
+    def test_document_404_for_unknown_contract(self, session, auth):
+        r = session.get(f"{API}/contracts/does-not-exist-xyz/document",
+                        headers=auth["headers"], timeout=20)
+        assert r.status_code == 404, f"expected 404, got {r.status_code}: {r.text[:200]}"
+
+    def test_document_returns_html_200_with_all_sections(self, session, auth):
+        items = session.get(f"{API}/contracts", headers=auth["headers"], timeout=15).json()
+        assert items, "no contracts seeded"
+        # prefer a seed contract that has the full picture; just take the first one
+        c0 = items[0]
+        cid = c0["contract_id"]
+
+        r = session.get(f"{API}/contracts/{cid}/document",
+                        headers=auth["headers"], timeout=30)
+        assert r.status_code == 200, r.text[:300]
+        ct = r.headers.get("content-type", "")
+        assert ct.startswith("text/html"), f"unexpected content-type: {ct}"
+        body = r.text
+        assert len(body) > 1000, f"document body too short: {len(body)} bytes"
+        # contract identity
+        assert c0["title"] in body, "title missing in HTML"
+        if c0.get("contract_number"):
+            assert c0["contract_number"] in body, "contract_number missing"
+        if c0.get("counterparty"):
+            assert c0["counterparty"] in body, "counterparty missing"
+        # required sections
+        missing = [s for s in self.REQUIRED_SECTIONS if s not in body]
+        assert not missing, f"missing sections in HTML: {missing}"
+
+    def test_document_seeded_lifecycle_contract_has_all_data(self, session, auth):
+        """Ensure rendered HTML includes the seeded risk/payment/esf rows for category contracts."""
+        items = session.get(f"{API}/contracts", headers=auth["headers"], timeout=15).json()
+        # pick one of the original seeded contracts (not TEST_*)
+        seed = next((c for c in items if not c["title"].startswith("TEST_")), items[0])
+        cid = seed["contract_id"]
+        r = session.get(f"{API}/contracts/{cid}/document",
+                        headers=auth["headers"], timeout=30)
+        assert r.status_code == 200
+        body = r.text
+        # brand header
+        assert "Conexia" in body or "CONEXIA" in body
+        # basic HTML doc
+        assert "<html" in body.lower() and "</html>" in body.lower()

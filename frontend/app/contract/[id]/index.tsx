@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl, Platform } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
 import { api } from "@/src/api";
 import { useT } from "@/src/i18n";
@@ -23,6 +25,8 @@ export default function ContractDetail() {
   const [aiText, setAiText] = useState("");
   const [showAi, setShowAi] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfErr, setPdfErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -50,6 +54,43 @@ export default function ContractDetail() {
     setAiBusy(false);
   }
 
+  async function downloadOrPrint() {
+    if (!id) return;
+    setPdfBusy(true); setPdfErr(null);
+    try {
+      const html = await api.contractDocumentHtml(id as string);
+      if (Platform.OS === "web") {
+        const blob = new Blob([html], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, "_blank");
+        if (win) {
+          // Wait briefly for content to render, then trigger print dialog
+          setTimeout(() => {
+            try { win.focus(); win.print(); } catch { /* ignore */ }
+          }, 500);
+        } else {
+          // Popup blocked — fall back to download
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `conexia-${data?.contract_number || id}.html`;
+          document.body.appendChild(a); a.click(); a.remove();
+        }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: data?.title || "Contrato", UTI: "com.adobe.pdf" });
+        } else {
+          await Print.printAsync({ uri });
+        }
+      }
+    } catch (e: any) {
+      setPdfErr(t("detail.download.err"));
+      console.warn("print", e);
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   if (loading || !data) {
     return <View style={[styles.root, { justifyContent: "center" }]}><ActivityIndicator color={colors.brandPrimary} /></View>;
   }
@@ -63,7 +104,9 @@ export default function ContractDetail() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} testID="back-button"><Ionicons name="chevron-back" size={26} color={colors.onSurface} /></Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>Contrato</Text>
-        <View style={{ width: 26 }} />
+        <Pressable onPress={downloadOrPrint} disabled={pdfBusy} style={styles.printBtn} testID="download-print-button">
+          {pdfBusy ? <ActivityIndicator color={colors.brandPrimary} size="small" /> : <Ionicons name="download-outline" size={22} color={colors.brandPrimary} />}
+        </Pressable>
       </View>
 
       <ScrollView
@@ -94,6 +137,22 @@ export default function ContractDetail() {
             <Text style={styles.obsText}>{data.observations}</Text>
           </View>
         ) : null}
+
+        {/* Download/Print button */}
+        <Pressable style={styles.downloadCta} onPress={downloadOrPrint} disabled={pdfBusy} testID="download-print-cta">
+          {pdfBusy ? (
+            <>
+              <ActivityIndicator color="#FFF" size="small" />
+              <Text style={styles.downloadCtaText}>{t("detail.download.busy")}</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="print-outline" size={18} color="#FFF" />
+              <Text style={styles.downloadCtaText}>{t("detail.download")}</Text>
+            </>
+          )}
+        </Pressable>
+        {pdfErr ? <Text style={{ color: colors.error, fontSize: 11, marginTop: 4 }}>{pdfErr}</Text> : null}
 
         {/* Financial KPIs */}
         <View style={styles.kpiCard}>
@@ -312,6 +371,9 @@ const styles = StyleSheet.create({
   obsBlock: { marginTop: spacing.sm, padding: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, borderLeftWidth: 3, borderLeftColor: colors.brandPrimary },
   obsLabel: { fontSize: 9, fontWeight: "800", color: colors.brandPrimary, letterSpacing: 0.8 },
   obsText: { fontSize: 12, color: colors.onSurface, marginTop: 2 },
+  printBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: colors.brandTertiary },
+  downloadCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.brandSecondary, paddingVertical: 12, borderRadius: radius.md, marginTop: spacing.lg },
+  downloadCtaText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   pillText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
   kpiCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.md, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border },

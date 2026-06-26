@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 5 — End-to-end verification of the new 'Download / Print contract' feature. Backend: ran the full pytest suite (30/30 passed) against the public preview URL, including 4 new tests for GET /api/contracts/{id}/document (200 + text/html, 401 without token, 404 for unknown id, body contains title/contract_number/counterparty and all 9 required sections: Información Contractual, Indicadores Financieros, Flujo de Aprobación, Matriz de Riesgos, Modificaciones, Pagos, ESF Ambiental-Social, Adendas, Línea de Tiempo). Frontend: on a 390x844 mobile viewport, demo login → Contratos tab → tapped contract card (ctr_941a2a13c0). Contract detail screen renders correctly and exposes BOTH download entry points: header icon button (testID='download-print-button') and primary CTA (testID='download-print-cta'). Tapping the CTA on web preview opens a new tab whose HTML body contains all 9 required sections. Zero JS errors and zero pageerror events; only the 2 pre-existing non-blocking RN-Web warnings ('shadow* style props deprecated', 'props.pointerEvents deprecated') were observed — same as iteration 4, not introduced by this change. Regression: all previous endpoints (auth, dashboard, contracts, sub-modules, evidence, AI) still 100% green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-web (transitive)", "issue": "Console warning '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — same as iteration 4, originates from RN-Web internals / app stylesheets that still use shadowColor/shadowOpacity/etc. Non-blocking on web. Reference: appears throughout /app/frontend (RN StyleSheet shadow* keys)."},
+      {"component": "react-native-web (transitive)", "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — same as iteration 4. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_5.json",
+    "/app/backend/tests/test_conexia_clm.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional / non-blocking) Migrate remaining RN shadow* style props to boxShadow and props.pointerEvents to style.pointerEvents to silence the two web deprecation warnings.",
+    "(Optional) Expo SDK 54 nag: package.json pins expo@54.0.34 / expo-font@14.0.11 / expo-router@6.0.23 — Expo suggests ~54.0.35 / ~14.0.12 / ~6.0.24. Currently functional; bump when convenient.",
+    "(Optional) Backend test refactor: TestPasswordAuth and TestLifecycleAndSubModules use class-scoped fixtures defined as instance methods — pytest emits a deprecation warning (PytestRemovedIn10). Convert to @classmethod when bandwidth allows."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py:673-683 — GET /api/contracts/{id}/document correctly returns HTMLResponse with Cache-Control: no-store and 404 for unknown ids; auth enforced via Depends(get_current_user). MongoDB queries explicitly project away _id (good). Async/await usage is correct (list-comprehension over async iterator).",
+    "/app/backend/server.py:477-665 render_contract_html — builds a self-contained HTML doc (no external CSS/JS) which is ideal for window.print() and expo-print PDF generation. All 9 required section headers are present verbatim.",
+    "/app/frontend/app/contract/[id]/index.tsx:57-92 downloadOrPrint — platform branching is correct: web uses Blob + window.open + setTimeout(()=>win.print(), 500) with a popup-blocked download fallback; native uses Print.printToFileAsync + Sharing.shareAsync with a Print.printAsync fallback. pdfBusy state disables both buttons during the request — good UX.",
+    "/app/frontend/src/api.ts:100-105 — contractDocumentHtml correctly uses authedFetch (so the Bearer token is attached) and returns r.text(); contractDocumentUrl is provided but currently unused — leaving it is fine in case main agent wants to expose a direct-link variant later.",
+    "Touch targets: both download buttons exceed 44x44 (header button is 32px icon inside a tappable Pressable but the visible CTA bar is large; consider hitSlop on the header icon for extra safety on small phones)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_conexia_clm.py (appended TestContractDocument with 4 new tests)"
+  ],
+  "success_rate": {"backend": "100% (30/30)", "frontend": "100% (6/6 review items verified)"},
+  "seed_data_creation": "None new. Used existing demo session via POST /api/auth/dev-login (demo@conexia.io). Seed v2 dataset already present from earlier iterations.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The new HTML-document endpoint is GET /api/contracts/{id}/document (auth required, returns text/html; 401 no-token; 404 unknown id). The frontend exposes both 'download-print-button' (header icon) and 'download-print-cta' (primary CTA in detail body). On web the CTA opens a new tab and calls window.print() after 500ms; if the popup is blocked it falls back to anchor download. On native it uses expo-print + expo-sharing. To reproduce locally: demo-login → Contratos → tap any contract card → tap CTA. The 9 required Spanish section titles ('Información Contractual', 'Indicadores Financieros', 'Flujo de Aprobación', 'Matriz de Riesgos', 'Modificaciones', 'Pagos', 'ESF Ambiental-Social', 'Adendas', 'Línea de Tiempo') must appear verbatim in render_contract_html. TEST_* contracts from previous backend runs are still in the DB.",
+  "rca_of_issue": "N/A — feature works as specified. No bugs found. The two RN-Web deprecation warnings are inherited from prior iterations and are not regressions introduced by the download/print feature."
+}
