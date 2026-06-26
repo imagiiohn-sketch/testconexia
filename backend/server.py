@@ -693,8 +693,11 @@ async def workflow_decision(contract_id: str, decision: WorkflowDecision,
     updated = None
     for s in workflow:
         if s["step"] == decision.step:
-            s["status"] = decision.decision; s["approver_id"] = user["user_id"]
-            s["approver_name"] = user["name"]; s["decided_at"] = now_utc(); s["note"] = decision.note
+            s["status"] = decision.decision
+            s["approver_id"] = user["user_id"]
+            s["approver_name"] = user["name"]
+            s["decided_at"] = now_utc()
+            s["note"] = decision.note
             updated = s
     if not updated:
         raise HTTPException(400, "Invalid step")
@@ -1014,10 +1017,12 @@ async def seed_demo():
         wf = default_workflow()
         if s["wf_all"]:
             for step in wf:
-                step["status"] = "approved"; step["approver_name"] = "Demo Approver"
+                step["status"] = "approved"
+                step["approver_name"] = "Demo Approver"
                 step["decided_at"] = now_utc() - timedelta(days=60)
         else:
-            wf[0]["status"] = "approved"; wf[0]["approver_name"] = "Demo Legal"
+            wf[0]["status"] = "approved"
+            wf[0]["approver_name"] = "Demo Legal"
             wf[0]["decided_at"] = now_utc() - timedelta(days=10)
         cid = f"ctr_{uuid.uuid4().hex[:10]}"
         c = {
