@@ -122,11 +122,14 @@ export default function Login() {
 
           <View style={styles.divider}><View style={styles.dividerLine} /><Text style={styles.dividerText}>{t("login.divider")}</Text><View style={styles.dividerLine} /></View>
 
-          <ProviderButton icon="logo-google" label={t("login.google")} onPress={googleLogin} testID="google-login-button" />
-          <ProviderButton icon="logo-microsoft" label={t("login.microsoft")} onPress={() => comingSoon("Microsoft")} testID="microsoft-login-button" disabledHint />
-          <ProviderButton icon="logo-apple" label={t("login.apple")} onPress={() => comingSoon("Apple")} testID="apple-login-button" disabledHint />
-          <ProviderButton icon="logo-yahoo" label={t("login.yahoo")} onPress={() => comingSoon("Yahoo")} testID="yahoo-login-button" disabledHint />
-          <ProviderButton icon="business-outline" label={t("login.sso")} onPress={() => comingSoon("SSO")} testID="sso-login-button" disabledHint />
+          <View style={styles.providerRow}>
+            <ProviderIcon icon="logo-google" label="Google" onPress={googleLogin} testID="google-login-button" />
+            <ProviderIcon icon="logo-microsoft" label="Microsoft" onPress={() => comingSoon("Microsoft")} testID="microsoft-login-button" muted />
+            <ProviderIcon icon="logo-apple" label="Apple" onPress={() => comingSoon("Apple")} testID="apple-login-button" muted />
+            <ProviderIcon icon="logo-yahoo" label="Yahoo" onPress={() => comingSoon("Yahoo")} testID="yahoo-login-button" muted />
+            <ProviderIcon icon="business-outline" label="SSO" onPress={() => comingSoon("SSO")} testID="sso-login-button" muted />
+          </View>
+          <Text style={styles.providerHint}>{t("login.provider.hint")}</Text>
 
           <Pressable style={styles.demoBtn} onPress={demoLogin} disabled={busy} testID="demo-login-button">
             <Ionicons name="flash-outline" size={14} color={colors.brandPrimary} />
@@ -142,12 +145,10 @@ export default function Login() {
   );
 }
 
-function ProviderButton({ icon, label, onPress, testID, disabledHint }: { icon: any; label: string; onPress: () => void; testID?: string; disabledHint?: boolean }) {
+function ProviderIcon({ icon, label, onPress, testID, muted }: { icon: any; label: string; onPress: () => void; testID?: string; muted?: boolean }) {
   return (
-    <Pressable style={({ pressed }) => [styles.providerBtn, pressed && { opacity: 0.7 }]} onPress={onPress} testID={testID}>
-      <Ionicons name={icon} size={16} color={colors.onSurface} />
-      <Text style={styles.providerText}>{label}</Text>
-      {disabledHint ? <Text style={styles.providerHint}>{"·  config"}</Text> : null}
+    <Pressable style={({ pressed }) => [styles.providerCircle, muted && { backgroundColor: colors.surfaceTertiary, borderColor: colors.border }, pressed && { opacity: 0.7 }]} onPress={onPress} testID={testID} accessibilityLabel={label}>
+      <Ionicons name={icon} size={20} color={muted ? colors.onSurfaceSecondary : colors.onSurface} />
     </Pressable>
   );
 }
@@ -174,9 +175,9 @@ const styles = StyleSheet.create({
   divider: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { fontSize: 10, color: colors.onSurfaceSecondary, letterSpacing: 1, fontWeight: "700" },
-  providerBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, marginBottom: 6, backgroundColor: "#FFF" },
-  providerText: { color: colors.onSurface, fontWeight: "600", fontSize: 13, flex: 1 },
-  providerHint: { color: colors.onSurfaceSecondary, fontSize: 10, fontStyle: "italic" },
+  providerRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4, gap: 8 },
+  providerCircle: { flex: 1, aspectRatio: 1, maxWidth: 52, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF", borderWidth: 1, borderColor: colors.border },
+  providerHint: { color: colors.onSurfaceSecondary, fontSize: 10, fontStyle: "italic", textAlign: "center", marginTop: 6 },
   demoBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, marginTop: 8 },
   demoBtnText: { color: colors.brandPrimary, fontWeight: "600", fontSize: 12 },
   err: { color: colors.error, marginTop: 6, fontSize: 11, textAlign: "center" },

@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 7 — compact OAuth icon row + avatar upload validated end-to-end. Backend: 13/13 pytest tests pass (6 new avatar tests + 7 regression). Frontend: 5 provider circles render in a single horizontal row (all 52x52, aspect 1.00, same y=476), single 'Requires customer configuration' hint below, all 5 testIDs present (google/microsoft/apple/yahoo/sso). Profile screen shows testID='change-avatar-button' wrapping the avatar with a dark teal camera badge bottom-right, and testID='change-avatar-link' rendering 'Change photo' / 'Cambiar foto'. POST /api/auth/avatar returns 401 without bearer, 400 with empty body/empty string, 200 with valid base64 producing a data:image/jpeg;base64,... data URI persisted on user.picture and verified via GET /api/auth/me. Data-URI pass-through path is also handled (no double-wrapping when input already starts with data:).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avatar.py",
+    "/app/backend/tests/test_conexia_clm.py",
+    "/app/backend/tests/test_share_links.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) The provider row's `flex:1 + maxWidth:52 + gap:8` works on 390px width but on very narrow devices (<320px) the circles could overlap the gaps — consider switching to `justifyContent: 'space-between'` without flex:1 or capping with `aspectRatio:1, width:48` instead of flex:1. Visual on 390px is correct.",
+    "(Optional) `expo-image-picker` MediaTypeOptions.Images is deprecated in newer SDK 54; switch to `['images']` array. Non-blocking for current SDK 54.0.34."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1175 lines — still over the 700-line guideline; splitting into routers/{auth,contracts,share,evidence,ai}.py would help maintainability. Same comment as iteration 6.",
+    "POST /api/auth/avatar correctly enforces auth (401), validates input (400), caps payload at ~3MB to avoid bloating user docs (413), strips/normalizes data: prefix, and re-reads user with _id excluded. Clean implementation.",
+    "Frontend changeAvatar() correctly requests media library permission, gates on canceled/null base64, sets uploading state for spinner, and calls refresh() after success so the new picture re-renders immediately."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avatar.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13)",
+    "frontend": "100% (all login + profile testIDs and visual layout verified)"
+  },
+  "seed_data_creation": "Used existing /api/seed (idempotent). No new seed required.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 7 added POST /api/auth/avatar (body {image_base64}, returns updated user with picture as data URI) and compacted the 5 OAuth provider buttons into a single horizontal row of 52x52 circles in /app/frontend/app/login.tsx with one shared 'Requires customer configuration' hint. Profile avatar in /app/frontend/app/(tabs)/profile.tsx is now tappable (testID='change-avatar-button') with a camera badge (Ionicons 'camera' webfont glyph) and a 'Cambiar foto'/'Change photo' text link (testID='change-avatar-link'). expo-image-picker can't be fully exercised in headless browsers; backend endpoint is fully covered by /app/backend/tests/test_avatar.py. Demo bearer obtained via POST /api/auth/dev-login. Existing test file test_conexia_clm.py + test_share_links.py remain valid regression suites.",
+  "rca_of_issue": "No bugs found. Note: an inline DOM probe for the camera badge icon initially returned False because Ionicons renders as a webfont glyph (single character inside a styled span — no 'svg' or 'camera' substring in innerHTML); visual screenshot confirms the badge renders correctly. This is a probe limitation, not a UI defect."
+}

@@ -308,6 +308,24 @@ async def set_locale(payload: dict, user=Depends(get_current_user)):
     return {"ok": True, "locale": locale}
 
 
+@api.post("/auth/avatar")
+async def set_avatar(payload: dict, user=Depends(get_current_user)):
+    image_base64 = (payload or {}).get("image_base64") or ""
+    if not image_base64:
+        raise HTTPException(400, "image_base64 required")
+    # Strip data URI prefix if provided, then re-attach as JPEG data URI
+    if image_base64.startswith("data:"):
+        data_uri = image_base64
+    else:
+        data_uri = f"data:image/jpeg;base64,{image_base64}"
+    # Sanity size limit ~3MB after base64 encoding to avoid bloating user docs
+    if len(data_uri) > 4_500_000:
+        raise HTTPException(413, "Image too large (max ~3MB)")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": data_uri}})
+    fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return doc_clean(fresh)
+
+
 @api.post("/auth/dev-login")
 async def dev_login(email: str = "demo@conexia.io"):
     existing = await db.users.find_one({"email": email})

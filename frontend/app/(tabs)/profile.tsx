@@ -1,9 +1,10 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
@@ -13,12 +14,29 @@ import { colors, spacing, radius } from "@/src/theme";
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refresh } = useAuth();
   const { t, lang, setLang } = useT();
+  const [uploading, setUploading] = useState(false);
 
   async function changeLang(l: "es" | "en") {
     setLang(l);
     try { await api.setLocale(l); } catch { /* ignore */ }
+  }
+
+  async function changeAvatar() {
+    setUploading(true);
+    try {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!lib.granted) return;
+      const r = await ImagePicker.launchImageLibraryAsync({
+        base64: true, quality: 0.5, allowsEditing: true, aspect: [1, 1],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      });
+      if (r.canceled || !r.assets[0].base64) return;
+      await api.setAvatar(r.assets[0].base64);
+      await refresh();
+    } catch (e) { console.warn(e); }
+    finally { setUploading(false); }
   }
 
   async function logout() {
@@ -29,11 +47,19 @@ export default function Profile() {
   return (
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: 140 }} style={styles.root} testID="profile-screen">
       <View style={styles.headRow}>
-        <Image source={user?.picture ? { uri: user.picture } : require("../../assets/images/conexia-logo.png")} style={styles.avatar} contentFit={user?.picture ? "cover" : "contain"} />
-        <View>
+        <Pressable onPress={changeAvatar} disabled={uploading} testID="change-avatar-button" style={styles.avatarWrap}>
+          <Image source={user?.picture ? { uri: user.picture } : require("../../assets/images/conexia-logo.png")} style={styles.avatar} contentFit={user?.picture ? "cover" : "contain"} />
+          <View style={styles.avatarBadge}>
+            {uploading ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="camera" size={14} color="#FFF" />}
+          </View>
+        </Pressable>
+        <View style={{ flex: 1 }}>
           <Text style={styles.name}>{user?.name || "—"}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.rolePill}><Text style={styles.roleText}>{(user?.role || "").toUpperCase()}</Text></View>
+          <Pressable onPress={changeAvatar} disabled={uploading} testID="change-avatar-link">
+            <Text style={styles.changePhotoLink}>{t("profile.changePhoto")}</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -103,7 +129,10 @@ function Row({ icon, label, value, last }: any) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   headRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  avatarWrap: { position: "relative" },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  avatarBadge: { position: "absolute", right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFF" },
+  changePhotoLink: { color: colors.brandPrimary, fontSize: 11, fontWeight: "700", marginTop: 6 },
   name: { fontSize: 18, fontWeight: "800", color: colors.onSurface },
   email: { fontSize: 12, color: colors.onSurfaceSecondary, marginTop: 2 },
   rolePill: { alignSelf: "flex-start", marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandTertiary },

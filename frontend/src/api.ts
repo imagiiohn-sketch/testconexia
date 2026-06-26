@@ -63,6 +63,8 @@ export const api = {
   logout: async () => { await authedFetch(`/api/auth/logout`, { method: "POST" }); },
   setLocale: (locale: "es" | "en") =>
     authedFetch(`/api/auth/locale`, { method: "POST", body: JSON.stringify({ locale }) }).then(jsonOrThrow),
+  setAvatar: (image_base64: string) =>
+    authedFetch(`/api/auth/avatar`, { method: "POST", body: JSON.stringify({ image_base64 }) }).then(jsonOrThrow),
   seed: () => fetch(`${BASE}/api/seed`, { method: "POST" }).then(jsonOrThrow),
   dashboard: () => authedFetch(`/api/dashboard`).then(jsonOrThrow),
   listContracts: (params: { status?: string; category?: string } = {}) => {
