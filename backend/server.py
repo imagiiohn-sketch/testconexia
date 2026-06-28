@@ -928,6 +928,83 @@ async def get_evidence(evidence_id: str, user=Depends(get_current_user)):
 
 
 # ---------- Dashboard ----------
+@api.get("/notifications")
+async def list_notifications(user=Depends(get_current_user)):
+    """Aggregate operational notifications for the current user."""
+    items = []
+    contracts_cursor = db.contracts.find({"parent_contract_id": None}, {"_id": 0})
+    async for c in contracts_cursor:
+        c["status"] = compute_status(c)
+        c["risk_level"] = compute_risk(c)
+        end = c.get("end_date")
+        if isinstance(end, str):
+            try:
+                end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            except Exception:
+                end = None
+        if end and end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        # Expiration alerts (60 / 30 / 7)
+        if end:
+            days = (end - now_utc()).days
+            if 0 <= days <= 60:
+                level = "high" if days <= 7 else ("medium" if days <= 30 else "low")
+                items.append({
+                    "id": f"exp_{c['contract_id']}",
+                    "type": "expiration",
+                    "level": level,
+                    "title": "Contrato por vencer",
+                    "message": f"{c['title']} vence en {days} días",
+                    "contract_id": c["contract_id"],
+                    "contract_number": c.get("contract_number"),
+                    "at": iso(end),
+                })
+        # Active penalties
+        penalty = float(c.get("penalty_value", 0) or 0)
+        if penalty > 0:
+            items.append({
+                "id": f"pen_{c['contract_id']}",
+                "type": "penalty",
+                "level": "high",
+                "title": "Multa activa",
+                "message": f"{c['title']} acumula {c.get('currency','USD')} {penalty:,.0f} en multas",
+                "contract_id": c["contract_id"],
+                "contract_number": c.get("contract_number"),
+                "at": iso(c.get("updated_at")),
+            })
+        # Rejected workflow steps
+        for step in (c.get("workflow") or []):
+            if step.get("status") == "rejected":
+                items.append({
+                    "id": f"rej_{c['contract_id']}_{step['step']}",
+                    "type": "workflow_rejected",
+                    "level": "high",
+                    "title": "Aprobación rechazada",
+                    "message": f"{step['step'].title()} rechazó {c['title']}",
+                    "contract_id": c["contract_id"],
+                    "contract_number": c.get("contract_number"),
+                    "at": iso(step.get("decided_at") or c.get("updated_at")),
+                })
+        # ESF non-compliant items
+        for esf in (c.get("esf_items") or []):
+            if not esf.get("compliant"):
+                items.append({
+                    "id": f"esf_{c['contract_id']}_{esf.get('id','?')}",
+                    "type": "esf_pending",
+                    "level": "medium",
+                    "title": "Requisito ESF pendiente",
+                    "message": f"{c['title']}: {esf.get('requirement','—')}",
+                    "contract_id": c["contract_id"],
+                    "contract_number": c.get("contract_number"),
+                    "at": iso(c.get("updated_at")),
+                })
+
+    # Sort: level desc (high>medium>low) then by date asc when expiration, desc otherwise
+    level_rank = {"high": 0, "medium": 1, "low": 2}
+    items.sort(key=lambda x: (level_rank.get(x["level"], 9), x.get("at") or ""))
+    return {"items": items, "count": len(items)}
+
+
 @api.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
     contracts = [c async for c in db.contracts.find({"parent_contract_id": None}, {"_id": 0})]

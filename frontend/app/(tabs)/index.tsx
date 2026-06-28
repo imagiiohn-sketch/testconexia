@@ -43,7 +43,7 @@ export default function Dashboard() {
               <Text style={styles.heroTitle} testID="hero-greeting">{t("dash.greeting")}, {user?.name?.split(" ")[0] || "Equipo"}</Text>
               <Text style={styles.heroSub}>{user?.department || "Dirección Ejecutiva"}</Text>
             </View>
-            <Pressable style={styles.bellBtn} onPress={() => router.push("/(tabs)/contracts")} testID="hero-bell-button">
+            <Pressable style={styles.bellBtn} onPress={() => router.push("/notifications")} testID="hero-bell-button">
               <Ionicons name="notifications-outline" size={20} color="#FFF" />
               {data && data.alerts.length > 0 ? <View style={styles.bellDot} /> : null}
             </Pressable>

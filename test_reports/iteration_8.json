@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 8 (Notifications bug fix) — BOTH backend and frontend verified. The bell on the dashboard now correctly navigates to /notifications (not /contracts). 11/11 backend tests pass after a fix applied by T1: the @api.get(\"/dashboard\") decorator had been accidentally removed when GET /api/notifications was inserted into server.py (line 1006). T1 restored it, otherwise the dashboard regression would have broken the entire app. Frontend E2E (mobile 390x844 viewport) confirms: demo-login → hero-bell tap → /notifications URL → notifications-screen renders 6 cards (HIGH/MEDIUM/LOW pills) → tap card opens correct contract detail. Backend aggregator validated for expiration, penalty, esf_pending types and level sort order; 401 enforced without auth.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Notifications", "issues": ["UI strings are mixed: login button is in English (\"Enter demo mode\") but the rest of the notifications screen / dashboard is in Spanish. Not blocking, but i18n inconsistency."]}
+    ],
+    "react_native_issues": [
+      {"component": "Global styles", "issue": "Console warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Multiple occurrences. Reference: any component using shadowColor/shadowOffset/shadowRadius — migrate to boxShadow per RN 0.76+."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notifications.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Migrate any shadow* StyleSheet props to the new boxShadow API (warning printed by React Native on web).",
+    "Optionally translate the login button text 'Enter demo mode' to match Spanish UI ('Entrar en modo demo')."
+  ],
+  "critical_code_review_comments": [
+    "REGRESSION FOUND & FIXED BY T1: /app/backend/server.py line 1006 — function `async def dashboard(...)` had lost its `@api.get(\"/dashboard\")` decorator when the new notifications endpoint was inserted above it. Without this fix the entire dashboard API would 404. T1 added the decorator back. Main agent should be mindful of decorator placement when inserting routes between existing endpoints.",
+    "server.py is 1253 lines — consider splitting into modules (routers/) per the >700 lines guideline.",
+    "Notifications aggregator iterates all contracts and computes nested aggregations on every request — fine for demo scale but should be paginated/limited or cached if contracts > 10k."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (restored @api.get(\"/dashboard\") decorator at line ~1006)",
+    "/app/backend/tests/test_notifications.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all assertions passed)"},
+  "seed_data_creation": "Used existing POST /api/seed demo data + added one TEST_ESF non-compliant item to an existing contract to verify ESF aggregator path. No cleanup of the added ESF item was performed (acceptable for demo DB).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Notifications endpoint lives at GET /api/notifications and aggregates: expiration (0-60d window, level high/medium/low based on 7/30/60), penalty (penalty_value>0 → high), workflow_rejected, esf_pending. /api/dashboard had a decorator regression fixed in iter 8 — verify it still has @api.get(\"/dashboard\") above the function. Frontend route /notifications (not nested under tabs). Bell uses testID 'hero-bell-button'.",
+  "rca_of_issue": "Original user-reported bug: bell on dashboard navigated to Contracts tab. Root cause: dashboard hero used router.push('/(tabs)/contracts'). Fix in iter 8: (1) added /api/notifications aggregator endpoint, (2) created /app/frontend/app/notifications.tsx, (3) changed bell onPress to router.push('/notifications'). Verified via UI E2E. Secondary regression found by T1: when the new notifications endpoint was inserted into server.py, the @api.get(\"/dashboard\") decorator immediately below it was accidentally deleted, leaving the dashboard handler orphaned. Mitigation: T1 restored the decorator and added a regression test (test_dashboard_still_works) to catch this in the future."
+}
