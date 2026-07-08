@@ -14,7 +14,8 @@
         "NSCameraUsageDescription": "Capturar evidencias en campo con timestamp",
         "NSPhotoLibraryUsageDescription": "Seleccionar fotos como evidencia contractual",
         "NSLocationWhenInUseUsageDescription": "Geolocalizar evidencias en sitio"
-      }
+      },
+      "bundleIdentifier": "com.emergent.contractforge.crdkce"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +28,8 @@
         "READ_EXTERNAL_STORAGE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "package": "com.emergent.contractforge.crdkce"
     },
     "web": {
       "bundler": "metro",

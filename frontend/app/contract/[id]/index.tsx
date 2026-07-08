@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl, Platform, Modal, Linking } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
@@ -37,6 +37,9 @@ export default function ContractDetail() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Re-fetch when this detail screen regains focus (e.g. after creating an addendum)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function decide(step: string, decision: "approved" | "rejected") {
     if (!id) return;

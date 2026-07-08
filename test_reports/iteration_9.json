@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 9 (useFocusEffect refetch bug fix) — FRONTEND-ONLY verification. Bug fully resolved. E2E on mobile 390x844 viewport against public URL: (1) Contracts list refetches on focus — created 'TEST_FocusV3_Contract' via 'Nuevo' form, returned to /contracts, list count went 17→18 and the new contract appears at the top. (2) Dashboard 'Recent' also refetches — same contract appears in /(tabs)/index after focus. (3) Contract detail refetches on focus — added 'TEST_Adenda_V3_focus' via 'Agregar Adenda', returned to detail via router.back(), Addenda (1) section immediately shows the new addendum without pull-to-refresh. (4) Evidence tab renders with FAB (structural check). All 4 files (contracts.tsx, index.tsx, evidence.tsx, contract/[id]/index.tsx) correctly import useFocusEffect from expo-router and wrap load() with useFocusEffect(useCallback(...)). Regression: dashboard bell → notifications still works (previous iteration fix intact). No backend regression tests run this iteration (frontend-only scope), but API calls behind the scenes succeeded (POST /api/contracts, POST /api/contracts/:id/addendum, GET /api/contracts, GET /api/dashboard all responded correctly as evidenced by UI state).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login", "issues": ["Demo login button label is in English ('Enter demo mode') while rest of the UI is Spanish — same i18n inconsistency reported in iter 8, still present."]},
+      {"screen": "New Contract form", "issues": ["Form headings and 'Create Draft' button are in English while the app runs in Spanish locale by default. Form field labels: Contract #, Title, Counterparty, etc. should be Spanish (Título, Contraparte, ...)."]}
+    ],
+    "react_native_issues": [
+      {"component": "Global styles", "issue": "Console warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — still un-migrated from iter 8. Reference: any component using shadowColor/shadowOffset/shadowRadius (e.g. /app/frontend/app/(tabs)/evidence.tsx:98, and (tabs)/index.tsx shadow props)."},
+      {"component": "PointerEvents prop", "issue": "Console warns: 'props.pointerEvents is deprecated. Use style.pointerEvents' — comes from a library or component using the old prop; low priority."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_9.json"
+  ],
+  "action_items": [
+    "Add testID attributes to the New Contract form fields (title-input, counterparty-input, value-input, submit button) and to the New Addendum form (addendum-title-input, addendum-submit-button). Currently tests must fall back to positional selectors, which is brittle.",
+    "Translate remaining English strings in the New Contract form and 'Enter demo mode' button to Spanish for consistency with the rest of the Spanish UI.",
+    "Migrate shadow* style props to boxShadow to silence the RN 0.76+ deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "useFocusEffect implementation is correct in all 4 files: (a) uses useCallback with load in deps, (b) imported from expo-router (not @react-navigation/native — both work, expo-router re-exports it). (c) contract/[id]/index.tsx keeps BOTH useEffect(load) and useFocusEffect(load) — this is redundant since useFocusEffect fires on initial focus too. Recommend removing the useEffect and keeping only useFocusEffect to avoid a double-fetch on mount. Reference: /app/frontend/app/contract/[id]/index.tsx:39-42.",
+    "The load() callback in each screen sets setLoading(true) inside useFocusEffect only in contracts.tsx; other screens do not toggle loading on refocus, so a stale value flashes briefly — acceptable UX but consider consistency."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only iteration)", "frontend": "100% — all 4 focus-refetch scenarios verified"},
+  "seed_data_creation": "Created 2 test contracts (TEST_Focus_Refetch_V2 ctr_63a9693aaa, TEST_FocusV3_Contract ctr_cf30dbe228) and 1 test addendum (TEST_Adenda_V3_focus) via UI. Not cleaned up — acceptable for demo DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The bug 'no aparecen adendas ni contratos' is FIXED via useFocusEffect in 4 screens. If future work adds new list/detail screens that must show freshly-created child data, apply the same pattern: `useFocusEffect(useCallback(() => { load(); }, [load]))` imported from expo-router. Consider dropping the redundant useEffect in contract/[id]/index.tsx (see critical_code_review). New Contract form still lacks testID attributes on inputs; add title-input/counterparty-input/value-input/create-draft-button testIDs to make automated tests reliable.",
+  "rca_of_issue": "RCA: Before fix, list screens used `useEffect(() => { load(); }, [load])` which only fires on mount. Expo Router with a bottom Tabs layout keeps mounted screens alive when switching tabs, and returning from a stacked child screen via router.back() does NOT remount the parent — so load() never fired again and the newly-created contract/addendum stayed absent from the UI even though the backend had it. Fix: replace with useFocusEffect(useCallback(() => { load(); }, [load])) which fires every time the screen gains focus. Verified end-to-end: created contracts appear in /contracts and dashboard Recent, and a new addendum appears in the parent contract's Addenda section — all without manual pull-to-refresh."
+}

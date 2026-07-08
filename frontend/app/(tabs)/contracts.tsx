@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, FlatList, RefreshControl, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 
 import { api } from "@/src/api";
 import { useT } from "@/src/i18n";
@@ -27,7 +27,11 @@ export default function Contracts() {
     setLoading(false); setRefreshing(false);
   }, [cat]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  // Re-fetch every time this screen gains focus (e.g. after creating a contract)
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    load();
+  }, [load]));
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]} testID="contracts-screen">
