@@ -34,7 +34,16 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/conexia-logo.png"
+      "favicon": "./assets/images/conexia-logo.png",
+      "name": "Conexia CLM",
+      "shortName": "Conexia",
+      "description": "Contract Lifecycle Management enterprise SaaS",
+      "themeColor": "#1F4A4A",
+      "backgroundColor": "#FFFFFF",
+      "lang": "es",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/"
     },
     "plugins": [
       "expo-router",

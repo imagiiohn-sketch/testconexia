@@ -9,14 +9,15 @@ import { StatusBar } from "expo-status-bar";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
 import { I18nProvider } from "@/src/i18n";
+import { registerServiceWorker } from "@/src/pwa";
 
 LogBox.ignoreAllLogs(true);
 
 // Keep the native splash visible from cold start until icon fonts register.
-// Required because @expo/vector-icons' componentDidMount fallback fires
-// Font.loadAsync against a broken vendor path if any <Icon> mounts before
-// the family is registered — which throws on Android Expo Go.
 SplashScreen.preventAutoHideAsync();
+
+// Register PWA service worker + inject meta tags (web only, no-op on native).
+registerServiceWorker();
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
