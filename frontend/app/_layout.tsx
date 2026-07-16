@@ -9,15 +9,11 @@ import { StatusBar } from "expo-status-bar";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
 import { I18nProvider } from "@/src/i18n";
-import { registerServiceWorker } from "@/src/pwa";
 
 LogBox.ignoreAllLogs(true);
 
 // Keep the native splash visible from cold start until icon fonts register.
 SplashScreen.preventAutoHideAsync();
-
-// Register PWA service worker + inject meta tags (web only, no-op on native).
-registerServiceWorker();
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
