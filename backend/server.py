@@ -433,7 +433,7 @@ async def list_contracts(status: Optional[str] = None, category: Optional[str] =
         q["status"] = status
     if category and category != "all":
         q["category"] = category
-    cursor = db.contracts.find(q, {"_id": 0}).sort("created_at", -1)
+    cursor = db.contracts.find(q, {"_id": 0}).sort("created_at", -1).limit(500)
     out = []
     async for c in cursor:
         c["status"] = compute_status(c)
@@ -932,7 +932,7 @@ async def get_evidence(evidence_id: str, user=Depends(get_current_user)):
 async def list_notifications(user=Depends(get_current_user)):
     """Aggregate operational notifications for the current user."""
     items = []
-    contracts_cursor = db.contracts.find({"parent_contract_id": None}, {"_id": 0})
+    contracts_cursor = db.contracts.find({"parent_contract_id": None}, {"_id": 0}).limit(500)
     async for c in contracts_cursor:
         c["status"] = compute_status(c)
         c["risk_level"] = compute_risk(c)
@@ -1007,7 +1007,7 @@ async def list_notifications(user=Depends(get_current_user)):
 
 @api.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
-    contracts = [c async for c in db.contracts.find({"parent_contract_id": None}, {"_id": 0})]
+    contracts = [c async for c in db.contracts.find({"parent_contract_id": None}, {"_id": 0}).limit(500)]
     for c in contracts:
         c["status"] = compute_status(c)
         c["risk_level"] = compute_risk(c)
