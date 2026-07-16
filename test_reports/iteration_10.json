@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only visual regression on login screen tagline alignment (iteration 10). Verified: (1) Conexia logo (testID=conexia-logo) renders 180x180 centered — logo center X = 187.5 in 375px viewport, exactly centered. (2) 'Contract Lifecycle Management' tagline renders directly below the logo with 0.0px offset from logo center (perfectly horizontally centered). (3) Old subtitle 'Auditable. Mobile. Enterprise.' is NOT present in either ES or EN mode. (4) All expected login elements present: Sign in/Sign up tabs, email input, password input, 'Sign in with email' primary button, 5 OAuth provider circles (Google/Microsoft/Apple/Yahoo/SSO), 'Requires customer configuration' hint, 'Enter demo mode' link, and ES/EN language toggle in top right. (5) Language toggle works and tagline still shows the same phrase. (6) Regression: Enter demo mode successfully calls dev-login and navigates to dashboard which renders KPI tiles (TOTAL VALUE $23,672,227, EXECUTED $3,480,000, RETENTION, PENALTIES, Expiration Semaphore, Recent contracts). Alignment fix is verified visually and programmatically.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* deprecated style props", "issue": "Console warning: 'shadow*' style props are deprecated. Use 'boxShadow'. Not blocking, but should be migrated. Not introduced this iteration."},
+      {"component": "props.pointerEvents deprecated", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Not blocking, pre-existing."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_10.json"],
+  "action_items": [
+    "None for this iteration — alignment fix verified working. Pre-existing deprecated style warnings (shadow*, pointerEvents) can be addressed in a future cleanup pass."
+  ],
+  "critical_code_review_comments": [
+    "Unused style 'subtle' remains in StyleSheet (line 163 of login.tsx) since the second subtitle line was removed. Safe to drop for cleanliness but has no functional impact."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested this iteration)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login screen tagline is now correctly centered directly below the logo. Only the single line 'Contract Lifecycle Management' is shown (in both ES and EN). Demo login flow to dashboard is fully functional. Backend not exercised this iteration beyond the /api/auth/dev-login called by the demo button — that endpoint returned successfully and delivered session token used to render the dashboard.",
+  "rca_of_issue": "Not applicable — no bug this iteration. User's reported misalignment is resolved: measured logo center X=187.5 and tagline center X=187.5 (offset 0.0px). Vertical position: tagline y=228, logo bottom y=216, so 12px breathing room via spacing.md marginTop."
+}

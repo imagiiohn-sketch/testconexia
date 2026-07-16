@@ -88,7 +88,6 @@ export default function Login() {
           </View>
           <Image source={require("../assets/images/conexia-logo.png")} style={styles.logo} contentFit="contain" testID="conexia-logo" />
           <Text style={styles.tagline}>{t("app.tagline")}</Text>
-          <Text style={styles.subtle}>{t("app.subtle")}</Text>
         </View>
 
         <View style={styles.card}>
@@ -159,9 +158,9 @@ const styles = StyleSheet.create({
   langSwitchWrap: { position: "absolute", top: 0, right: 0 },
   langSwitch: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.brandTertiary, borderRadius: radius.pill },
   langSwitchText: { color: colors.brandPrimary, fontSize: 12, fontWeight: "800", letterSpacing: 1 },
-  logo: { width: 150, height: 150 },
-  tagline: { fontSize: 14, fontWeight: "700", color: colors.brandPrimary, letterSpacing: 1.5, marginTop: spacing.xs },
-  subtle: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 2, letterSpacing: 0.5 },
+  logo: { width: 180, height: 180, alignSelf: "center" },
+  tagline: { fontSize: 13, fontWeight: "700", color: colors.brandPrimary, letterSpacing: 1.5, marginTop: spacing.md, textAlign: "center", alignSelf: "center" },
+  subtle: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 2, letterSpacing: 0.5, textAlign: "center", alignSelf: "center" },
   card: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, marginTop: spacing.lg },
   tabRow: { flexDirection: "row", backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, padding: 3, marginBottom: spacing.md },
   tab: { flex: 1, paddingVertical: 8, borderRadius: radius.pill, alignItems: "center" },
