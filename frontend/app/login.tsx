@@ -79,13 +79,13 @@ export default function Login() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.surface }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" testID="login-screen">
+        <View style={styles.topBar}>
+          <Pressable onPress={() => setLang(lang === "es" ? "en" : "es")} style={styles.langSwitch} testID="lang-switch">
+            <Ionicons name="language-outline" size={14} color={colors.brandPrimary} />
+            <Text style={styles.langSwitchText}>{lang === "es" ? "EN" : "ES"}</Text>
+          </Pressable>
+        </View>
         <View style={styles.brandWrap}>
-          <View style={styles.langSwitchWrap}>
-            <Pressable onPress={() => setLang(lang === "es" ? "en" : "es")} style={styles.langSwitch} testID="lang-switch">
-              <Ionicons name="language-outline" size={14} color={colors.brandPrimary} />
-              <Text style={styles.langSwitchText}>{lang === "es" ? "EN" : "ES"}</Text>
-            </Pressable>
-          </View>
           <Image source={require("../assets/images/conexia-logo.png")} style={styles.logo} contentFit="contain" testID="conexia-logo" />
           <Text style={styles.tagline}>{t("app.tagline")}</Text>
         </View>
@@ -153,9 +153,9 @@ function ProviderIcon({ icon, label, onPress, testID, muted }: { icon: any; labe
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: colors.surface, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xl },
-  brandWrap: { alignItems: "center", marginTop: spacing.md, position: "relative" },
-  langSwitchWrap: { position: "absolute", top: 0, right: 0 },
+  container: { flexGrow: 1, backgroundColor: colors.surface, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  topBar: { flexDirection: "row", justifyContent: "flex-end", marginBottom: spacing.sm },
+  brandWrap: { alignItems: "center", marginTop: 0 },
   langSwitch: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.brandTertiary, borderRadius: radius.pill },
   langSwitchText: { color: colors.brandPrimary, fontSize: 12, fontWeight: "800", letterSpacing: 1 },
   logo: { width: 180, height: 180, alignSelf: "center" },
