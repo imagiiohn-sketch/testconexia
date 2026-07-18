@@ -138,7 +138,7 @@ export default function Login() {
           {err ? <Text style={styles.err} testID="login-error">{err}</Text> : null}
         </View>
 
-        <Text style={styles.footer}>Software Engineering • Product Consulting</Text>
+        <Text style={styles.footer}>{t("app.subtle")}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

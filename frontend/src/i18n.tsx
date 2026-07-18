@@ -9,7 +9,7 @@ const dict = {
   es: {
     "app.name": "CONEXIA CLM",
     "app.tagline": "Contract Lifecycle Management",
-    "app.subtle": "Auditable. Móvil. Enterprise.",
+    "app.subtle": "Auditable · Móvil · Enterprise",
 
     "login.title": "Inicia sesión",
     "login.subtitle": "Accede a tu panel de contratos, evidencias y aprobaciones.",
@@ -244,7 +244,7 @@ const dict = {
   en: {
     "app.name": "CONEXIA CLM",
     "app.tagline": "Contract Lifecycle Management",
-    "app.subtle": "Auditable. Mobile. Enterprise.",
+    "app.subtle": "Auditable · Mobile · Enterprise",
 
     "login.title": "Sign in",
     "login.subtitle": "Access your contracts, evidence and approval panel.",
