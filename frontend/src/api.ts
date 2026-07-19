@@ -99,6 +99,8 @@ export const api = {
     authedFetch(`/api/evidence`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
   aiAnalyze: (body: { contract_id?: string; contract_text: string }) =>
     authedFetch(`/api/ai/analyze`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  aiExtractContract: (body: { file_base64: string; mime_type?: string; filename?: string }) =>
+    authedFetch(`/api/ai/extract-contract`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
   notifications: () => authedFetch(`/api/notifications`).then(jsonOrThrow),
   contractDocumentUrl: (id: string) => `${BASE}/api/contracts/${id}/document`,
   contractDocumentHtml: async (id: string): Promise<string> => {

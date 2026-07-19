@@ -105,15 +105,17 @@ class ContractCreate(BaseModel):
     currency: str = "USD"
     start_date: datetime
     end_date: datetime
+    signed_date: Optional[datetime] = None
     category: ContractCategory = "bienes"
     category_fields: dict = Field(default_factory=dict)
     department: Optional[str] = None
     contract_number: Optional[str] = None
-    consultant: Optional[str] = None
+    provider: Optional[str] = None
     product: Optional[str] = None
     scheduled_date: Optional[datetime] = None
     delivery_date: Optional[datetime] = None
     pay_pct: float = 0
+    payment_breakdown: List[dict] = Field(default_factory=list)  # [{type: "anticipo"|"adenda"|..., pct, note}]
     observations: Optional[str] = ""
 
 
@@ -143,6 +145,12 @@ class EvidenceCreate(BaseModel):
 class AIAnalyzeRequest(BaseModel):
     contract_id: Optional[str] = None
     contract_text: str
+
+
+class ExtractContractRequest(BaseModel):
+    file_base64: str
+    mime_type: Optional[str] = None
+    filename: Optional[str] = None
 
 
 class RiskCreate(BaseModel):
@@ -404,11 +412,14 @@ async def create_contract(payload: ContractCreate, user=Depends(get_current_user
         "category": payload.category,
         "category_fields": payload.category_fields or {},
         "contract_number": payload.contract_number,
-        "consultant": payload.consultant,
+        "provider": payload.provider,
+        "consultant": payload.provider,  # legacy alias — kept for downstream reports until fully retired
         "product": payload.product,
         "scheduled_date": payload.scheduled_date,
         "delivery_date": payload.delivery_date,
+        "signed_date": payload.signed_date,
         "pay_pct": payload.pay_pct,
+        "payment_breakdown": payload.payment_breakdown or [],
         "observations": payload.observations or "",
         "department": payload.department,
         "owner_id": user["user_id"],
@@ -1081,6 +1092,101 @@ Analyze the contract text and return STRICT JSON with this exact schema (no mark
   "overall_risk": "low|medium|high"
 }
 Be concise. Empty arrays if nothing applies."""
+
+
+EXTRACT_PROMPT = """You extract structured contract fields from raw text. Reply ONLY valid JSON (no markdown), schema:
+{
+  "title": "string (short)",
+  "counterparty": "string (proveedor / vendor / other party)",
+  "provider": "string (persona natural o representante del proveedor)",
+  "product": "string (bien/servicio/producto contratado)",
+  "contract_number": "string or null",
+  "total_value": number,
+  "currency": "USD|HNL|EUR|GTQ|MXN|COP|CLP|PEN|other",
+  "signed_date": "YYYY-MM-DD or null",
+  "start_date": "YYYY-MM-DD or null",
+  "end_date": "YYYY-MM-DD or null",
+  "scheduled_date": "YYYY-MM-DD or null",
+  "delivery_date": "YYYY-MM-DD or null",
+  "pay_pct": number,
+  "payment_breakdown": [{"type": "anticipo|hito|adenda|contra_entrega|final", "pct": number, "note": "string"}],
+  "category": "bienes|obras|servicios_no_consultoria|consultor_individual|firma_consultora|acuerdo_marco",
+  "description": "string (1-2 lines)",
+  "observations": "string"
+}
+If a field is not present, return null / empty. Detect currency by symbols: L (Lempira/HNL), $ (USD default), € (EUR), Q (GTQ), etc."""
+
+
+@api.post("/ai/extract-contract")
+async def extract_contract(req: ExtractContractRequest, user=Depends(get_current_user)):
+    """Extract structured fields from an uploaded PDF/DOCX/TXT contract using Claude."""
+    import base64
+    try:
+        raw = base64.b64decode(req.file_base64)
+    except Exception:
+        raise HTTPException(400, "Invalid base64")
+    if len(raw) > 8_000_000:
+        raise HTTPException(413, "File too large (max 8MB)")
+
+    mime = (req.mime_type or "").lower()
+    fname = (req.filename or "").lower()
+    text = ""
+    try:
+        if "pdf" in mime or fname.endswith(".pdf"):
+            from pypdf import PdfReader
+            import io
+            reader = PdfReader(io.BytesIO(raw))
+            text = "\n".join((p.extract_text() or "") for p in reader.pages[:20])
+        elif "word" in mime or "officedocument" in mime or fname.endswith(".docx"):
+            import docx  # python-docx
+            import io
+            doc = docx.Document(io.BytesIO(raw))
+            text = "\n".join(p.text for p in doc.paragraphs)
+        else:
+            # try utf-8 text
+            try:
+                text = raw.decode("utf-8", errors="ignore")
+            except Exception:
+                raise HTTPException(415, "Unsupported file type")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Could not read document: {e}")
+
+    text = (text or "").strip()
+    if len(text) < 20:
+        raise HTTPException(422, "Document produced too little text")
+    if len(text) > 25000:
+        text = text[:25000]
+
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "AI key missing")
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except Exception as e:
+        raise HTTPException(500, f"AI lib unavailable: {e}")
+
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"x_{uuid.uuid4().hex[:8]}",
+                   system_message=EXTRACT_PROMPT).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        resp = await chat.send_message(UserMessage(text=f"Contrato:\n\n{text}"))
+    except Exception as e:
+        raise HTTPException(502, f"AI error: {e}")
+    body = resp if isinstance(resp, str) else getattr(resp, "content", str(resp))
+    import json
+    payload = None
+    try:
+        payload = json.loads(body)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}", body)
+        if m:
+            try:
+                payload = json.loads(m.group(0))
+            except Exception:
+                payload = None
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Could not parse AI response as JSON")
+    return payload
 
 
 @api.post("/ai/analyze")
