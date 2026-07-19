@@ -1240,9 +1240,15 @@ If a field is not present, return null / empty. Detect currency by symbols: L (L
 @api.post("/ai/extract-contract")
 async def extract_contract(req: ExtractContractRequest, user=Depends(get_current_user)):
     """Extract structured fields from an uploaded PDF/DOCX/TXT contract using Claude.
-    If the PDF is scanned (image-only) and pypdf yields no text, we send the PDF
-    directly to Claude Vision via FileContentWithMimeType so it can OCR it natively."""
-    import base64, io, os, tempfile
+
+    Strategy (robust for scanned PDFs, no external system deps required):
+      1. Try to extract text with pypdf (fast, free).
+      2. If PDF and text is empty/short, use PyMuPDF (fitz) to also try native
+         text extraction (better for many PDFs).
+      3. If still empty, rasterize the first few pages to PNG images with fitz
+         and send them to Claude Sonnet as ImageContent (native vision/OCR).
+    """
+    import base64, io
     try:
         raw = base64.b64decode(req.file_base64)
     except Exception:
@@ -1258,12 +1264,29 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     text = ""
     try:
         if is_pdf:
-            from pypdf import PdfReader
+            # 1) pypdf
             try:
+                from pypdf import PdfReader
                 reader = PdfReader(io.BytesIO(raw))
                 text = "\n".join((p.extract_text() or "") for p in reader.pages[:120])
             except Exception:
-                text = ""  # will fall back to Claude vision
+                text = ""
+            # 2) fitz fallback (better native text extractor)
+            if len((text or "").strip()) < 200:
+                try:
+                    import fitz  # PyMuPDF
+                    with fitz.open(stream=raw, filetype="pdf") as fdoc:
+                        parts = []
+                        for i in range(min(len(fdoc), 120)):
+                            try:
+                                parts.append(fdoc[i].get_text("text") or "")
+                            except Exception:
+                                pass
+                        alt = "\n".join(parts).strip()
+                    if len(alt) > len((text or "").strip()):
+                        text = alt
+                except Exception:
+                    pass
         elif is_docx:
             import docx
             doc = docx.Document(io.BytesIO(raw))
@@ -1276,12 +1299,11 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     except HTTPException:
         raise
     except Exception as e:
-        # non-fatal; may still recover via vision for PDFs
-        text = "" if is_pdf else ""
         if not is_pdf:
             raise HTTPException(400, f"Could not read document: {e}")
 
     text = (text or "").strip()
+    # If not a PDF and no text -> hard fail (docx/txt cannot be OCR'd here)
     if not is_pdf and len(text) < 20:
         raise HTTPException(422, "Document produced too little text")
     if len(text) > 45000:
@@ -1290,37 +1312,46 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "AI key missing")
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
     except Exception as e:
         raise HTTPException(500, f"AI lib unavailable: {e}")
 
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"x_{uuid.uuid4().hex[:8]}",
                    system_message=EXTRACT_PROMPT).with_model("anthropic", "claude-sonnet-4-6")
 
-    tmp_path = None
-    try:
-        if is_pdf and len(text) < 200:
-            # Scanned / image-only PDF: send file directly to Claude for native OCR/vision.
-            fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
-            with os.fdopen(fd, "wb") as f:
-                f.write(raw)
-            file_content = FileContentWithMimeType(mime_type="application/pdf", file_path=tmp_path)
-            msg = UserMessage(
-                text=("Este es un contrato en PDF (posiblemente escaneado). "
-                      "Extrae los campos solicitados y responde ÚNICAMENTE con el JSON pedido, "
-                      "sin explicaciones ni bloques de código."),
-                file_contents=[file_content],
-            )
-        else:
-            msg = UserMessage(text=f"Contrato:\n\n{text}")
+    # Build the user message: text path OR vision-on-image-pages path
+    msg = None
+    if is_pdf and len(text) < 200:
+        # Scanned PDF -> rasterize first N pages and send as images
         try:
-            resp = await chat.send_message(msg)
+            import fitz
+            images_b64 = []
+            with fitz.open(stream=raw, filetype="pdf") as fdoc:
+                max_pages = min(len(fdoc), 6)  # keep cost under control
+                for i in range(max_pages):
+                    pix = fdoc[i].get_pixmap(dpi=150)  # good OCR balance
+                    png = pix.tobytes("png")
+                    images_b64.append(base64.b64encode(png).decode("ascii"))
+            if not images_b64:
+                raise HTTPException(422, "Empty PDF (no pages)")
+            file_contents = [ImageContent(image_base64=b) for b in images_b64]
+            msg = UserMessage(
+                text=("Este es un contrato en PDF ESCANEADO. Aplica OCR/visión sobre "
+                      "las imágenes de las páginas y devuelve EXCLUSIVAMENTE el JSON "
+                      "pedido, sin explicaciones ni ```."),
+                file_contents=file_contents,
+            )
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(502, f"AI error: {e}")
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try: os.unlink(tmp_path)
-            except Exception: pass
+            raise HTTPException(500, f"PDF rasterization failed: {e}")
+    else:
+        msg = UserMessage(text=f"Contrato:\n\n{text}")
+
+    try:
+        resp = await chat.send_message(msg)
+    except Exception as e:
+        raise HTTPException(502, f"AI error: {e}")
 
     body = resp if isinstance(resp, str) else getattr(resp, "content", str(resp))
     import json
