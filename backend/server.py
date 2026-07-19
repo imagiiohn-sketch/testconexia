@@ -1245,8 +1245,8 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
         raw = base64.b64decode(req.file_base64)
     except Exception:
         raise HTTPException(400, "Invalid base64")
-    if len(raw) > 8_000_000:
-        raise HTTPException(413, "File too large (max 8MB)")
+    if len(raw) > 50_000_000:
+        raise HTTPException(413, "File too large (max 50MB)")
 
     mime = (req.mime_type or "").lower()
     fname = (req.filename or "").lower()
@@ -1256,7 +1256,7 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
             from pypdf import PdfReader
             import io
             reader = PdfReader(io.BytesIO(raw))
-            text = "\n".join((p.extract_text() or "") for p in reader.pages[:20])
+            text = "\n".join((p.extract_text() or "") for p in reader.pages[:120])
         elif "word" in mime or "officedocument" in mime or fname.endswith(".docx"):
             import docx  # python-docx
             import io
@@ -1276,8 +1276,8 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     text = (text or "").strip()
     if len(text) < 20:
         raise HTTPException(422, "Document produced too little text")
-    if len(text) > 25000:
-        text = text[:25000]
+    if len(text) > 45000:
+        text = text[:45000]
 
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "AI key missing")
