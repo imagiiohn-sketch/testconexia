@@ -87,6 +87,13 @@ export default function Profile() {
       </Section>
 
       <Section title={t("profile.help")}>
+        {user?.role === "admin" ? (
+          <Pressable style={[styles.row, styles.rowDivider]} onPress={() => router.push("/admin/users" as any)} testID="open-admin">
+            <Ionicons name="people-outline" size={18} color={colors.brandPrimary} />
+            <View style={{ flex: 1 }}><Text style={styles.rowLabel}>Administración de Usuarios</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.onSurfaceSecondary} />
+          </Pressable>
+        ) : null}
         <Pressable style={styles.row} onPress={() => router.push("/instructivo")} testID="open-instructivo">
           <Ionicons name="book-outline" size={18} color={colors.brandPrimary} />
           <View style={{ flex: 1 }}>

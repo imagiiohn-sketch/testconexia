@@ -65,6 +65,12 @@ export const api = {
     authedFetch(`/api/auth/locale`, { method: "POST", body: JSON.stringify({ locale }) }).then(jsonOrThrow),
   setAvatar: (image_base64: string) =>
     authedFetch(`/api/auth/avatar`, { method: "POST", body: JSON.stringify({ image_base64 }) }).then(jsonOrThrow),
+  adminListUsers: () => authedFetch(`/api/admin/users`).then(jsonOrThrow),
+  adminCreateUser: (body: any) => authedFetch(`/api/admin/users`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  adminUpdateUser: (id: string, body: any) => authedFetch(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }).then(jsonOrThrow),
+  adminDeleteUser: (id: string) => authedFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(jsonOrThrow),
+  myNotifications: () => authedFetch(`/api/notifications/mine`).then(jsonOrThrow),
+  readAllNotifications: () => authedFetch(`/api/notifications/mine/read-all`, { method: "POST" }).then(jsonOrThrow),
   seed: () => fetch(`${BASE}/api/seed`, { method: "POST" }).then(jsonOrThrow),
   dashboard: () => authedFetch(`/api/dashboard`).then(jsonOrThrow),
   listContracts: (params: { status?: string; category?: string } = {}) => {

@@ -71,9 +71,11 @@ def doc_clean(d):
 
 
 # ---------- Models ----------
-Role = Literal["legal", "finance", "operations", "direction", "field"]
+Role = Literal["admin", "coordinador_general", "adquisiciones", "financiero", "monitoreo", "field",
+               "legal", "finance", "operations", "direction"]  # legacy roles kept for backward compat with existing data
 ContractStatus = Literal["draft", "in_review", "approved", "signed", "active", "expiring", "closed"]
-WorkflowStep = Literal["legal", "finance", "operations", "direction"]
+WorkflowStep = Literal["adquisiciones", "financiero", "coordinador_general",
+                        "legal", "finance", "operations", "direction"]  # legacy kept
 RiskLevel = Literal["low", "medium", "high"]
 ContractCategory = Literal[
     "bienes", "obras", "servicios_no_consultoria",
@@ -349,6 +351,124 @@ async def dev_login(email: str = "demo@conexia.io"):
     token = await create_session_for(uid)
     fresh = await db.users.find_one({"user_id": uid}, {"_id": 0})
     return {"session_token": token, "user": doc_clean(fresh)}
+
+
+# ---------- Admin: user management ----------
+ADMIN_ROLES = {"admin"}
+VALID_ROLES = {"admin", "coordinador_general", "adquisiciones", "financiero", "monitoreo", "field"}
+
+
+def _require_admin(user):
+    if user.get("role") not in ADMIN_ROLES:
+        raise HTTPException(403, "Requiere rol admin")
+
+
+@api.get("/admin/users")
+async def admin_list_users(user=Depends(get_current_user)):
+    _require_admin(user)
+    return [doc_clean(u) async for u in db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1)]
+
+
+@api.post("/admin/users")
+async def admin_create_user(payload: dict, user=Depends(get_current_user)):
+    _require_admin(user)
+    email = (payload.get("email") or "").strip().lower()
+    name = (payload.get("name") or "").strip()
+    password = payload.get("password") or ""
+    role = payload.get("role") or "monitoreo"
+    dept = payload.get("department") or ""
+    if not email or not name or len(password) < 6:
+        raise HTTPException(400, "email, name y password (min 6) requeridos")
+    if role not in VALID_ROLES:
+        raise HTTPException(400, f"role inválido")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "email ya existe")
+    uid = f"user_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "user_id": uid, "email": email, "name": name, "picture": None,
+        "role": role, "department": dept, "auth_provider": "password",
+        "password_hash": hash_password(password),
+        "created_at": now_utc(), "locale": "es", "created_by": user["user_id"],
+    }
+    await db.users.insert_one(doc)
+    # notify (mocked email + in-app)
+    await _notify(uid, "account_created", "Cuenta creada",
+                    f"Tu cuenta Conexia CLM fue creada por {user['name']}. Rol: {role}.",
+                    channel_hint="email+inapp")
+    fresh = await db.users.find_one({"user_id": uid}, {"_id": 0, "password_hash": 0})
+    return doc_clean(fresh)
+
+
+@api.patch("/admin/users/{user_id}")
+async def admin_update_user(user_id: str, payload: dict, user=Depends(get_current_user)):
+    _require_admin(user)
+    updates: dict = {}
+    if "role" in payload:
+        if payload["role"] not in VALID_ROLES:
+            raise HTTPException(400, "role inválido")
+        updates["role"] = payload["role"]
+    if "name" in payload: updates["name"] = payload["name"]
+    if "department" in payload: updates["department"] = payload["department"]
+    if payload.get("password"):
+        if len(payload["password"]) < 6: raise HTTPException(400, "password min 6")
+        updates["password_hash"] = hash_password(payload["password"])
+    if not updates:
+        raise HTTPException(400, "sin cambios")
+    r = await db.users.update_one({"user_id": user_id}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "user not found")
+    if "password_hash" in updates:
+        await _notify(user_id, "password_reset", "Contraseña restablecida",
+                        f"El administrador {user['name']} restableció tu contraseña.",
+                        channel_hint="email+inapp")
+    fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return doc_clean(fresh)
+
+
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user=Depends(get_current_user)):
+    _require_admin(user)
+    if user_id == user["user_id"]:
+        raise HTTPException(400, "No puedes eliminarte a ti mismo")
+    r = await db.users.delete_one({"user_id": user_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "user not found")
+    await db.user_sessions.delete_many({"user_id": user_id})
+    return {"ok": True}
+
+
+# ---------- Notifications service (pluggable) ----------
+async def _notify(user_id: str, kind: str, title: str, message: str, channel_hint: str = "inapp"):
+    """Persist a notification for the user AND emit through configured channels.
+       Email/push are STUBBED until API keys are configured. In-app is always live."""
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1, "name": 1, "locale": 1})
+    entry = {
+        "id": uuid.uuid4().hex, "user_id": user_id, "kind": kind, "title": title,
+        "message": message, "at": now_utc(), "read": False,
+        "channel_hint": channel_hint, "email": (target or {}).get("email"),
+    }
+    await db.user_notifications.insert_one(entry)
+    # Email dispatch — placeholder ready for Resend/SendGrid wiring
+    if target and "email" in channel_hint:
+        log.info("[NOTIFY:email PENDING PROVIDER] to=%s subject=%s", target.get("email"), title)
+    # Push dispatch — placeholder ready for Emergent-managed push wiring
+    if "push" in channel_hint:
+        log.info("[NOTIFY:push PENDING PROVIDER] user=%s title=%s", user_id, title)
+    return entry
+
+
+@api.get("/notifications/mine")
+async def my_notifications(user=Depends(get_current_user)):
+    q = {"user_id": user["user_id"]}
+    items = [doc_clean(n) async for n in db.user_notifications.find(q, {"_id": 0}).sort("at", -1).limit(50)]
+    unread = await db.user_notifications.count_documents({**q, "read": False})
+    return {"items": items, "unread": unread}
+
+
+@api.post("/notifications/mine/read-all")
+async def mark_all_read(user=Depends(get_current_user)):
+    r = await db.user_notifications.update_many({"user_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"updated": r.modified_count}
 
 
 # ---------- Workflow / risk helpers ----------
@@ -1364,6 +1484,19 @@ async def on_startup():
         await db.share_links.create_index("expires_at", expireAfterSeconds=0)
     except Exception:
         pass
+    await db.user_notifications.create_index("user_id")
+    await db.user_notifications.create_index([("user_id", 1), ("read", 1)])
+    # Seed initial admin
+    existing = await db.users.find_one({"email": "admin@conexia.io"})
+    if not existing:
+        await db.users.insert_one({
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": "admin@conexia.io", "name": "Administrador Conexia",
+            "picture": None, "role": "admin", "department": "Plataforma",
+            "auth_provider": "password", "password_hash": hash_password("Conexiadmin90"),
+            "created_at": now_utc(), "locale": "es",
+        })
+        log.info("Admin seed created: admin@conexia.io")
     log.info("Conexia CLM v2 ready.")
 
 
