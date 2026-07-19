@@ -8,10 +8,8 @@ import { colors } from "@/src/theme";
 export default function Index() {
   const { user, loading } = useAuth();
 
-  // ensure seed exists (idempotent) — no-op if already populated
-  useEffect(() => {
-    api.seed().catch(() => { /* ignore */ });
-  }, []);
+  // Auto-seed disabled — production mode. Re-enable manually via POST /api/seed if needed.
+  useEffect(() => {}, []);
 
   if (loading) {
     return (
