@@ -1239,8 +1239,10 @@ If a field is not present, return null / empty. Detect currency by symbols: L (L
 
 @api.post("/ai/extract-contract")
 async def extract_contract(req: ExtractContractRequest, user=Depends(get_current_user)):
-    """Extract structured fields from an uploaded PDF/DOCX/TXT contract using Claude."""
-    import base64
+    """Extract structured fields from an uploaded PDF/DOCX/TXT contract using Claude.
+    If the PDF is scanned (image-only) and pypdf yields no text, we send the PDF
+    directly to Claude Vision via FileContentWithMimeType so it can OCR it natively."""
+    import base64, io, os, tempfile
     try:
         raw = base64.b64decode(req.file_base64)
     except Exception:
@@ -1250,20 +1252,23 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
 
     mime = (req.mime_type or "").lower()
     fname = (req.filename or "").lower()
+    is_pdf = ("pdf" in mime) or fname.endswith(".pdf")
+    is_docx = ("word" in mime) or ("officedocument" in mime) or fname.endswith(".docx")
+
     text = ""
     try:
-        if "pdf" in mime or fname.endswith(".pdf"):
+        if is_pdf:
             from pypdf import PdfReader
-            import io
-            reader = PdfReader(io.BytesIO(raw))
-            text = "\n".join((p.extract_text() or "") for p in reader.pages[:120])
-        elif "word" in mime or "officedocument" in mime or fname.endswith(".docx"):
-            import docx  # python-docx
-            import io
+            try:
+                reader = PdfReader(io.BytesIO(raw))
+                text = "\n".join((p.extract_text() or "") for p in reader.pages[:120])
+            except Exception:
+                text = ""  # will fall back to Claude vision
+        elif is_docx:
+            import docx
             doc = docx.Document(io.BytesIO(raw))
             text = "\n".join(p.text for p in doc.paragraphs)
         else:
-            # try utf-8 text
             try:
                 text = raw.decode("utf-8", errors="ignore")
             except Exception:
@@ -1271,10 +1276,13 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(400, f"Could not read document: {e}")
+        # non-fatal; may still recover via vision for PDFs
+        text = "" if is_pdf else ""
+        if not is_pdf:
+            raise HTTPException(400, f"Could not read document: {e}")
 
     text = (text or "").strip()
-    if len(text) < 20:
+    if not is_pdf and len(text) < 20:
         raise HTTPException(422, "Document produced too little text")
     if len(text) > 45000:
         text = text[:45000]
@@ -1282,16 +1290,38 @@ async def extract_contract(req: ExtractContractRequest, user=Depends(get_current
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "AI key missing")
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
     except Exception as e:
         raise HTTPException(500, f"AI lib unavailable: {e}")
 
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"x_{uuid.uuid4().hex[:8]}",
                    system_message=EXTRACT_PROMPT).with_model("anthropic", "claude-sonnet-4-6")
+
+    tmp_path = None
     try:
-        resp = await chat.send_message(UserMessage(text=f"Contrato:\n\n{text}"))
-    except Exception as e:
-        raise HTTPException(502, f"AI error: {e}")
+        if is_pdf and len(text) < 200:
+            # Scanned / image-only PDF: send file directly to Claude for native OCR/vision.
+            fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
+            with os.fdopen(fd, "wb") as f:
+                f.write(raw)
+            file_content = FileContentWithMimeType(mime_type="application/pdf", file_path=tmp_path)
+            msg = UserMessage(
+                text=("Este es un contrato en PDF (posiblemente escaneado). "
+                      "Extrae los campos solicitados y responde ÚNICAMENTE con el JSON pedido, "
+                      "sin explicaciones ni bloques de código."),
+                file_contents=[file_content],
+            )
+        else:
+            msg = UserMessage(text=f"Contrato:\n\n{text}")
+        try:
+            resp = await chat.send_message(msg)
+        except Exception as e:
+            raise HTTPException(502, f"AI error: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try: os.unlink(tmp_path)
+            except Exception: pass
+
     body = resp if isinstance(resp, str) else getattr(resp, "content", str(resp))
     import json
     payload = None
