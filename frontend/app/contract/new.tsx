@@ -61,9 +61,24 @@ export default function NewContract() {
         let s = ""; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
         b64 = btoa(s);
       } else if (file.uri) {
-        const FS = await import("expo-file-system");
-        b64 = await FS.readAsStringAsync(file.uri, { encoding: FS.EncodingType.Base64 });
+        // expo-file-system v18+ moved readAsStringAsync to /legacy
+        try {
+          const FSLegacy: any = await import("expo-file-system/legacy");
+          b64 = await FSLegacy.readAsStringAsync(file.uri, { encoding: "base64" });
+        } catch (_e) {
+          // Fallback to new File API (SDK 54+)
+          const FS: any = await import("expo-file-system");
+          if (FS.File) {
+            const f = new FS.File(file.uri);
+            b64 = await f.base64();
+          } else if (typeof FS.readAsStringAsync === "function") {
+            b64 = await FS.readAsStringAsync(file.uri, { encoding: FS.EncodingType?.Base64 || "base64" });
+          } else {
+            throw new Error("No file reader available on this platform");
+          }
+        }
       }
+      if (!b64) throw new Error("No se pudo leer el archivo");
       const data = await api.aiExtractContract({ file_base64: b64, mime_type: file.mimeType, filename: file.name });
       // Pre-fill fields (only overwrite empty ones so user typed data is preserved)
       const set = (setter: any, cur: string, val?: any) => { if (val && !cur) setter(String(val)); };
