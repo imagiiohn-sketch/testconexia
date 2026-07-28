@@ -83,6 +83,10 @@ export const api = {
   getContract: (id: string) => authedFetch(`/api/contracts/${id}`).then(jsonOrThrow),
   createContract: (body: any) =>
     authedFetch(`/api/contracts`, { method: "POST", body: JSON.stringify(body) }).then(jsonOrThrow),
+  updateContract: (id: string, body: any) =>
+    authedFetch(`/api/contracts/${id}`, { method: "PATCH", body: JSON.stringify(body) }).then(jsonOrThrow),
+  deleteContract: (id: string) =>
+    authedFetch(`/api/contracts/${id}`, { method: "DELETE" }).then(jsonOrThrow),
   workflowDecision: (id: string, step: string, decision: "approved" | "rejected", note = "") =>
     authedFetch(`/api/contracts/${id}/workflow`, { method: "POST", body: JSON.stringify({ step, decision, note }) }).then(jsonOrThrow),
   sign: (id: string) => authedFetch(`/api/contracts/${id}/sign`, { method: "POST" }).then(jsonOrThrow),

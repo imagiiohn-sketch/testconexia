@@ -101,7 +101,7 @@ class LoginRequest(BaseModel):
 
 class ContractCreate(BaseModel):
     title: str
-    counterparty: str
+    counterparty: Optional[str] = ""
     description: Optional[str] = ""
     total_value: float = 0
     currency: str = "USD"
@@ -338,19 +338,7 @@ async def set_avatar(payload: dict, user=Depends(get_current_user)):
 
 @api.post("/auth/dev-login")
 async def dev_login(email: str = "demo@conexia.io"):
-    existing = await db.users.find_one({"email": email})
-    if not existing:
-        uid = f"user_{uuid.uuid4().hex[:12]}"
-        existing = {
-            "user_id": uid, "email": email, "name": "Demo Director",
-            "picture": None, "role": "direction", "department": "Executive",
-            "auth_provider": "dev", "created_at": now_utc(), "locale": "es",
-        }
-        await db.users.insert_one(existing)
-    uid = existing["user_id"]
-    token = await create_session_for(uid)
-    fresh = await db.users.find_one({"user_id": uid}, {"_id": 0})
-    return {"session_token": token, "user": doc_clean(fresh)}
+    raise HTTPException(410, "dev-login disabled in production")
 
 
 # ---------- Admin: user management ----------
@@ -591,6 +579,71 @@ async def get_contract(contract_id: str, user=Depends(get_current_user)):
     out["addenda"] = addenda
     out["evidence_count"] = ev_count
     return out
+
+
+class ContractPatch(BaseModel):
+    title: Optional[str] = None
+    counterparty: Optional[str] = None
+    description: Optional[str] = None
+    total_value: Optional[float] = None
+    currency: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    signed_date: Optional[datetime] = None
+    category: Optional[ContractCategory] = None
+    category_fields: Optional[dict] = None
+    department: Optional[str] = None
+    contract_number: Optional[str] = None
+    provider: Optional[str] = None
+    product: Optional[str] = None
+    scheduled_date: Optional[datetime] = None
+    delivery_date: Optional[datetime] = None
+    pay_pct: Optional[float] = None
+    payment_breakdown: Optional[List[dict]] = None
+    observations: Optional[str] = None
+
+
+@api.patch("/contracts/{contract_id}")
+async def update_contract(contract_id: str, payload: ContractPatch, user=Depends(get_current_user)):
+    c = await db.contracts.find_one({"contract_id": contract_id})
+    if not c:
+        raise HTTPException(404, "Contract not found")
+    # Editable by admin or by contract owner
+    if user.get("role") != "admin" and c.get("owner_id") != user["user_id"]:
+        raise HTTPException(403, "No autorizado para editar este contrato")
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if not updates:
+        return doc_clean(c)
+    # keep consultant alias in sync with provider
+    if "provider" in updates:
+        updates["consultant"] = updates["provider"]
+    if "total_value" in updates:
+        updates["retention_value"] = (updates["total_value"] or 0) * 0.05
+    updates["updated_at"] = now_utc()
+    entry = {"id": uuid.uuid4().hex, "at": now_utc(), "actor_id": user["user_id"],
+             "actor_name": user.get("name"), "kind": "updated",
+             "message": f"Contrato editado por {user.get('name')}"}
+    await db.contracts.update_one({"contract_id": contract_id},
+                                  {"$set": updates, "$push": {"timeline": entry}})
+    fresh = await db.contracts.find_one({"contract_id": contract_id}, {"_id": 0})
+    fresh["status"] = compute_status(fresh)
+    fresh["risk_level"] = compute_risk(fresh)
+    return doc_clean(fresh)
+
+
+@api.delete("/contracts/{contract_id}")
+async def delete_contract(contract_id: str, user=Depends(get_current_user)):
+    c = await db.contracts.find_one({"contract_id": contract_id})
+    if not c:
+        raise HTTPException(404, "Contract not found")
+    if user.get("role") != "admin" and c.get("owner_id") != user["user_id"]:
+        raise HTTPException(403, "No autorizado para eliminar este contrato")
+    # Cascade: delete addenda, evidence and share links tied to this contract
+    await db.contracts.delete_many({"parent_contract_id": contract_id})
+    await db.evidence.delete_many({"contract_id": contract_id})
+    await db.share_links.delete_many({"contract_id": contract_id})
+    await db.contracts.delete_one({"contract_id": contract_id})
+    return {"ok": True, "deleted": contract_id}
 
 
 def _fmt_money(v, cur="USD") -> str:
@@ -1450,69 +1503,11 @@ SAMPLES = [
 
 
 @api.post("/seed")
-async def seed_demo():
-    user = await db.users.find_one({"email": "demo@conexia.io"})
-    if not user:
-        uid = f"user_{uuid.uuid4().hex[:12]}"
-        user = {"user_id": uid, "email": "demo@conexia.io", "name": "Demo Director",
-                "picture": None, "role": "direction", "department": "Executive",
-                "auth_provider": "dev", "created_at": now_utc(), "locale": "es"}
-        await db.users.insert_one(user)
-
-    if await db.contracts.count_documents({}) > 0:
-        return {"ok": True, "skipped": True}
-
-    for i, s in enumerate(SAMPLES):
-        start = now_utc() - timedelta(days=90)
-        end = now_utc() + timedelta(days=s["days_to_end"])
-        wf = default_workflow()
-        if s["wf_all"]:
-            for step in wf:
-                step["status"] = "approved"
-                step["approver_name"] = "Demo Approver"
-                step["decided_at"] = now_utc() - timedelta(days=60)
-        else:
-            wf[0]["status"] = "approved"
-            wf[0]["approver_name"] = "Demo Legal"
-            wf[0]["decided_at"] = now_utc() - timedelta(days=10)
-        cid = f"ctr_{uuid.uuid4().hex[:10]}"
-        c = {
-            "contract_id": cid, "title": s["title"], "counterparty": s["counterparty"],
-            "description": s["description"], "total_value": s["total_value"], "currency": "USD",
-            "start_date": start, "end_date": end, "status": s["status"], "workflow": wf,
-            "executed_value": s["executed"], "retention_value": s["total_value"] * 0.05,
-            "penalty_value": s["penalty"], "risk_level": "low", "parent_contract_id": None,
-            "category": s["category"], "category_fields": s["category_fields"],
-            "contract_number": f"CON-2026-{1001 + i:04d}",
-            "consultant": s["consultant"], "product": s["product"],
-            "scheduled_date": start + timedelta(days=30),
-            "delivery_date": end, "pay_pct": s["pay_pct"],
-            "observations": "Contrato seed para demostración",
-            "department": "Operaciones", "owner_id": user["user_id"],
-            "created_at": now_utc() - timedelta(days=90),
-            "updated_at": now_utc() - timedelta(days=2),
-            "risks": [{"id": uuid.uuid4().hex, "risk": "Atraso por permisos ambientales",
-                       "probability": "medium", "impact": "high",
-                       "mitigation": "Seguimiento semanal", "responsible": "PMO",
-                       "status": "monitoring", "created_at": now_utc() - timedelta(days=30)}],
-            "modifications": [],
-            "payments": [{"id": uuid.uuid4().hex, "invoice": f"F-{1001 + i:05d}",
-                          "date": now_utc() - timedelta(days=20),
-                          "amount": s["executed"] / 2 if s["executed"] else 0,
-                          "deliverable": "Hito 1", "status": "paid",
-                          "created_at": now_utc() - timedelta(days=20)}] if s["executed"] else [],
-            "esf_items": [{"id": uuid.uuid4().hex, "requirement": "Plan de manejo ambiental",
-                           "compliant": True,
-                           "verification_date": now_utc() - timedelta(days=15),
-                           "observations": "Verificado por consultor ambiental",
-                           "created_at": now_utc() - timedelta(days=15)}],
-            "timeline": [{"id": uuid.uuid4().hex, "at": now_utc() - timedelta(days=90),
-                          "actor_id": user["user_id"], "actor_name": user["name"],
-                          "kind": "created", "message": "Contrato creado en sistema CONEXIA"}],
-        }
-        c["risk_level"] = compute_risk(c)
-        await db.contracts.insert_one(c)
-    return {"ok": True, "seeded": len(SAMPLES)}
+async def seed_demo(user=Depends(get_current_user)):
+    """Demo seed — DISABLED in production. Only admin can trigger it explicitly."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Seed disabled")
+    return {"ok": False, "disabled": True, "message": "Seed permanently disabled in production build"}
 
 
 @api.get("/")

@@ -97,6 +97,20 @@ export default function ContractDetail() {
   const [shareInfo, setShareInfo] = useState<{ url: string; title: string; num: string; counterparty: string } | null>(null);
   const [shareToast, setShareToast] = useState<string | null>(null);
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  async function confirmDelete() {
+    if (!id) return;
+    setDeleteBusy(true);
+    try {
+      await api.deleteContract(id as string);
+      setDeleteOpen(false);
+      router.replace("/(tabs)/contracts" as any);
+    } catch (e: any) {
+      console.warn(e);
+    } finally { setDeleteBusy(false); }
+  }
+
   async function openShare() {
     if (!id) return;
     setShareOpen(true);
@@ -204,9 +218,17 @@ export default function ContractDetail() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} testID="back-button"><Ionicons name="chevron-back" size={26} color={colors.onSurface} /></Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>Contrato</Text>
-        <Pressable onPress={downloadOrPrint} disabled={pdfBusy} style={styles.printBtn} testID="download-print-button">
-          {pdfBusy ? <ActivityIndicator color={colors.brandPrimary} size="small" /> : <Ionicons name="download-outline" size={22} color={colors.brandPrimary} />}
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 4 }}>
+          <Pressable onPress={() => router.push(`/contract/${id}/edit` as any)} style={styles.printBtn} testID="edit-contract-button">
+            <Ionicons name="create-outline" size={22} color={colors.brandPrimary} />
+          </Pressable>
+          <Pressable onPress={() => setDeleteOpen(true)} style={styles.printBtn} testID="delete-contract-button">
+            <Ionicons name="trash-outline" size={22} color={colors.error} />
+          </Pressable>
+          <Pressable onPress={downloadOrPrint} disabled={pdfBusy} style={styles.printBtn} testID="download-print-button">
+            {pdfBusy ? <ActivityIndicator color={colors.brandPrimary} size="small" /> : <Ionicons name="download-outline" size={22} color={colors.brandPrimary} />}
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -219,7 +241,7 @@ export default function ContractDetail() {
         </View>
         {data.contract_number ? <Text style={styles.contractNum}>{data.contract_number}</Text> : null}
         <Text style={styles.title}>{data.title}</Text>
-        <Text style={styles.counter}>{data.counterparty}</Text>
+        {data.counterparty && data.counterparty !== data.title ? <Text style={styles.counter}>{data.counterparty}</Text> : null}
         {data.description ? <Text style={styles.desc}>{data.description}</Text> : null}
 
         {/* Common contract fields */}
@@ -468,6 +490,32 @@ export default function ContractDetail() {
           <Pressable style={shareStyles.close} onPress={() => setShareOpen(false)} testID="share-close">
             <Text style={shareStyles.closeText}>{t("cancel")}</Text>
           </Pressable>
+        </View>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => setDeleteOpen(false)}>
+        <View style={shareStyles.backdrop}>
+          <View style={[shareStyles.sheet, { paddingBottom: 20 }]}>
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Ionicons name="warning-outline" size={40} color={colors.error} />
+              <Text style={[shareStyles.title, { color: colors.error, marginTop: 6 }]}>Eliminar contrato</Text>
+              <Text style={{ color: colors.onSurfaceSecondary, fontSize: 12, textAlign: "center", marginTop: 6 }}>
+                Esta acción es irreversible. Se eliminarán también sus adendas, evidencias y enlaces compartidos.
+              </Text>
+            </View>
+            <Pressable style={[shareStyles.row, { backgroundColor: colors.error }]} onPress={confirmDelete} disabled={deleteBusy} testID="delete-confirm">
+              {deleteBusy ? <ActivityIndicator color="#FFF" /> : (
+                <>
+                  <Ionicons name="trash-outline" size={18} color="#FFF" />
+                  <Text style={shareStyles.rowText}>Eliminar definitivamente</Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable style={shareStyles.close} onPress={() => setDeleteOpen(false)} testID="delete-cancel">
+              <Text style={shareStyles.closeText}>{t("cancel")}</Text>
+            </Pressable>
+          </View>
         </View>
       </Modal>
     </View>
