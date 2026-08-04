@@ -33,7 +33,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./public/icon-192.png",
       "name": "Conexia CLM",
       "shortName": "Conexia",
