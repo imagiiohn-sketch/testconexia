@@ -338,7 +338,21 @@ async def set_avatar(payload: dict, user=Depends(get_current_user)):
 
 @api.post("/auth/dev-login")
 async def dev_login(email: str = "demo@conexia.io"):
-    raise HTTPException(410, "dev-login disabled in production")
+    """Demo mode: quick sign-in as demo user (no password). Safe: seed is disabled so
+    the DB stays clean; this only creates/reuses the demo account itself."""
+    existing = await db.users.find_one({"email": email})
+    if not existing:
+        uid = f"user_{uuid.uuid4().hex[:12]}"
+        existing = {
+            "user_id": uid, "email": email, "name": "Demo Director",
+            "picture": None, "role": "coordinador_general", "department": "Demo",
+            "auth_provider": "dev", "created_at": now_utc(), "locale": "es",
+        }
+        await db.users.insert_one(existing)
+    uid = existing["user_id"]
+    token = await create_session_for(uid)
+    fresh = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    return {"session_token": token, "user": doc_clean(fresh)}
 
 
 # ---------- Admin: user management ----------
