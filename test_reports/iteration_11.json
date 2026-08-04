@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 11 — full backend + frontend validation of the CLM v2 changes (counterparty optional, PATCH/DELETE contract, seed disabled, dev-login 410, AI OCR). Backend: 11/11 pytest cases passing (test_iteration_11_changes.py) including admin login, dashboard, POST /api/contracts without counterparty, POST with full fields (provider/product/payment_breakdown), PATCH updates (title/total_value/provider) with consultant mirroring provider and retention_value=total_value*0.05 recalculated and a 'contract updated' timeline entry appended, 403 on PATCH by non-owner user, DELETE returns {ok:true, deleted:<id>} and subsequent GET 404, POST /api/seed anonymous → 401, POST /api/seed as admin → 200 with {ok:false, disabled:true}, POST /api/auth/dev-login → 410 Gone, POST /api/ai/extract-contract on a text PDF (PyMuPDF built) → 200 with title+total_value parsed, and OCR fallback via Claude vision on a scanned/image-only PDF → 200 with structured JSON. Frontend (mobile viewport 375x667, Playwright): login as admin → dashboard; navigation to /contracts (testid contracts-screen visible); tap new-contract-button → /contract/new; VERIFIED the contract-counterparty-input testID DOES NOT exist on the new form (regression); filled title/provider/value/signed → submit → routed to /contract/{id} where contract-detail-screen, edit-contract-button, delete-contract-button, and download-print-button are all present; tapped edit → /contract/{id}/edit with title pre-filled ('Contrato Playwright'); changed title to 'Contrato Playwright EDITADO' and submitted → returned to detail page showing new title; tapped delete → confirmation modal appears with delete-confirm button; confirmed delete → routed back to /contracts and the deleted contract is no longer present. All 12 request items are green. Only pre-existing non-blocking RN warnings observed (shadow* deprecated, props.pointerEvents deprecated).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props (pre-existing)", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Not blocking. Reference: multiple StyleSheet.create usages across app/ (theme.ts shadow tokens)."},
+      {"component": "props.pointerEvents (pre-existing)", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Not blocking; likely from a third-party wrapper (react-native-modal / RN internal). Reference: React Native / library internals."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_11_changes.py",
+    "/app/test_reports/pytest/iteration_11.xml"
+  ],
+  "action_items": [
+    "None required. All acceptance criteria for iteration 11 pass. Optionally, in a later cleanup pass migrate remaining 'shadow*' style tokens to 'boxShadow' and 'props.pointerEvents' to 'style.pointerEvents' to silence the two pre-existing RN warnings.",
+    "Consider populating description of ContractCreate examples to include start_date/end_date since they remain required — not part of this iteration but a doc detail."
+  ],
+  "critical_code_review_comments": [
+    "frontend/app/contract/new.tsx line 124 still sends counterparty:'provider || title.trim()' in the create payload even though counterparty is now optional. This is harmless and preserves the historical field; the *input* is removed as required. If the intent is to fully drop counterparty from the frontend, this fallback can be removed.",
+    "Class-scoped pytest fixture defined as an instance method emits a PytestRemovedIn10Warning in test_iteration_11_changes.py. Cosmetic; will be updated when pytest 10 lands.",
+    "PATCH /api/contracts response payload — response nesting varies; test uses .get('contract', data) fallback. If the API contract is meant to be flat, standardize the shape."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration_11_changes.py (new file — 11 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (12/12 request items)"},
+  "seed_data_creation": "Two TEST_-prefixed contracts were created via POST /api/contracts (one without counterparty, one with full fields). One additional was created + deleted for the DELETE test. Frontend E2E created and deleted 'Contrato Playwright'. Net: 2 test contracts remain in DB (TEST_no_counterparty, TEST_full_fields, TEST_patch_edited).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iteration-11 acceptance criteria are green. Backend suite lives at /app/backend/tests/test_iteration_11_changes.py — run with EXPO_PUBLIC_BACKEND_URL set. AI extraction (text + scanned OCR via Claude vision) is confirmed working end-to-end. Do NOT re-enable /api/seed or /api/auth/dev-login — they are permanently disabled by design (401 anon, {ok:false,disabled:true} admin, 410 dev-login). Admin credentials remain admin@conexia.io / Conexiadmin90.",
+  "rca_of_issue": "N/A — no defects found in this iteration."
+}
