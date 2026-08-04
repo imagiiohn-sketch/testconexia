@@ -26,7 +26,13 @@ export async function clearToken(): Promise<void> {
   await SecureStore.deleteItemAsync(KEY);
 }
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+// Persistent backend URL. Emergent's preview URL serves the FastAPI backend
+// permanently and is always reachable from the Imagiio production frontend.
+// If EXPO_PUBLIC_BACKEND_URL is set at build time it wins; otherwise use the
+// persistent preview URL so the deployed PWA still reaches the backend.
+const BASE =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  "https://contract-forge-35.preview.emergentagent.com";
 
 async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getToken();
