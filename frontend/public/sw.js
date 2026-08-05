@@ -18,6 +18,13 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// Force activation when the page requests it (see +html.tsx registration script)
+self.addEventListener("message", (event) => {
+  if (event && event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {

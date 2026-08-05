@@ -12,11 +12,41 @@ import type { PropsWithChildren } from "react";
 const SW_REGISTER_SCRIPT = `
 (function () {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+  var EXPECTED_VERSION = 'v4';
   window.addEventListener('load', function () {
+    // Force fetch latest sw.js from network (bypass HTTP cache)
     navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .then(function (reg) { reg && reg.update && reg.update().catch(function(){}); })
+      .register('/sw.js?v=' + EXPECTED_VERSION, { scope: '/', updateViaCache: 'none' })
+      .then(function (reg) {
+        if (!reg) return;
+        // If a new SW is waiting, activate it and reload once
+        function activateWaiting() {
+          if (reg.waiting) {
+            reg.waiting.postMessage && reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }
+        activateWaiting();
+        reg.addEventListener && reg.addEventListener('updatefound', function () {
+          var installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', function () {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              // A new SW is ready — reload once to hand over control
+              window.location.reload();
+            }
+          });
+        });
+        reg.update && reg.update().catch(function(){});
+      })
       .catch(function () { /* best-effort */ });
+
+    // Detect a controller change (new SW took control) and reload for the user
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
   });
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
