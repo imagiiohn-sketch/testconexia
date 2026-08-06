@@ -32,7 +32,7 @@ export async function clearToken(): Promise<void> {
 // persistent preview URL so the deployed PWA still reaches the backend.
 const BASE =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
-  "https://contract-forge-35.preview.emergentagent.com";
+  "https://conexia-8vwq.onrender.com";
 
 async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getToken();
