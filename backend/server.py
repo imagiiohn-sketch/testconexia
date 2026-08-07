@@ -262,17 +262,40 @@ async def login(req: LoginRequest):
     user.pop("_id", None)
     return {"session_token": token, "user": doc_clean(user)}
 
+class FrontendSessionRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    picture: Optional[str] = None
+    session_token: str
 
 @api.post("/auth/session")
-async def create_session_google(req: SessionRequest):
-    async with httpx.AsyncClient(timeout=20.0) as cx:
-        r = await cx.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": req.session_id},
-        )
-    if r.status_code != 200:
-        raise HTTPException(401, "Invalid session_id")
-    data = r.json()
+async def create_session_google(req: FrontendSessionRequest):
+    email = req.email
+    
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        uid = existing["user_id"]
+        await db.users.update_one({"user_id": uid}, {"$set": {
+            "name": req.name if req.name else existing.get("name"), 
+            "picture": req.picture if req.picture else existing.get("picture"),
+        }})
+    else:
+        uid = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": uid, "email": email, 
+            "name": req.name if req.name else email.split("@")[0],
+            "picture": req.picture, "role": "direction", "department": "Executive",
+            "auth_provider": "google", "created_at": now_utc(), "locale": "es",
+        })
+        
+    token = req.session_token
+    await db.user_sessions.update_one({"session_token": token}, {"$set": {
+        "session_token": token, "user_id": uid,
+        "expires_at": now_utc() + timedelta(days=7), "created_at": now_utc(),
+    }}, upsert=True)
+    
+    return {"status": "success", "user_id": uid}
+
     email = data["email"]
     existing = await db.users.find_one({"email": email})
     if existing:
