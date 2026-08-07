@@ -44,7 +44,7 @@ export default function Login() {
     setErr(null); setBusy(true);
     try {
       const redirectUrl = Platform.OS === "web" ? window.location.origin + "/" : Linking.createURL("auth");
-      const authUrl = "https://conexia-8vwq.onrender.com" + "/api/auth/google/login?redirect=" + encodeURIComponent(redirectUrl);
+      const authUrl = `https://conexia-8vwq.onrender.com{encodeURIComponent(redirectUrl)}`;
       if (Platform.OS === "web") { window.location.href = authUrl; return; }
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
       if (result.type !== "success" || !result.url) { setBusy(false); return; }
