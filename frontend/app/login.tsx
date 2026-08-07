@@ -40,26 +40,66 @@ export default function Login() {
     finally { setBusy(false); }
   }
 
-  async function googleLogin() {
+    async function googleLogin() {
     setErr(null); setBusy(true);
     try {
+      // 1. URL directa de autorización de Google sin pasar por Emergent
+      // REEMPLAZA 'TU_GOOGLE_CLIENT_ID_AQUÍ' por tu ID de cliente de la consola de Google Cloud
+      const clientId = "331641713433-m95lhovms7b8i2m9svl0m433pt9jact4.apps.googleusercontent.com"; 
       const redirectUrl = Platform.OS === "web" ? window.location.origin + "/" : Linking.createURL("auth");
-      const authUrl = `https://conexia-8vwq.onrender.com{encodeURIComponent(redirectUrl)}`;
+      
+      const authUrl = `https://google.com?` + 
+        `client_id=${clientId}` +
+        `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
+        `&response_type=token` +
+        `&scope=${encodeURIComponent("https://googleapis.com https://googleapis.com")}`;
+
       if (Platform.OS === "web") { window.location.href = authUrl; return; }
+      
+      // 2. Abre el navegador seguro en el celular
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
       if (result.type !== "success" || !result.url) { setBusy(false); return; }
+      
+      // 3. Extraemos el access_token que devuelve Google
       const url = result.url;
       const hashIdx = url.indexOf("#");
       const fragment = hashIdx >= 0 ? url.slice(hashIdx + 1) : "";
       const params = new URLSearchParams(fragment || url.split("?")[1] || "");
-      const sessionId = params.get("session_id");
-      if (!sessionId) { setErr("No session"); setBusy(false); return; }
-      const { session_token } = await api.createSession(sessionId);
-      await signInWithToken(session_token);
-      router.replace("/(tabs)");
+      const accessToken = params.get("access_token");
+      
+      if (!accessToken) { setErr("Error de autenticación con Google"); setBusy(false); return; }
+
+      // 4. Pedimos los datos del perfil directamente a Google con el token obtenido
+      const userInfoResponse = await fetch('https://googleapis.com', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const googleUser = await userInfoResponse.json();
+
+      // 5. Enviamos los datos listos a tu backend en Render modificada
+      const backendResponse = await fetch('https://conexia-8vwq.onrender.com/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture,
+          session_token: accessToken
+        }),
+      });
+
+      const resultado = await backendResponse.json();
+      
+      if (resultado.status === 'success') {
+        await saveToken(accessToken);
+        await signInWithToken(accessToken);
+        router.replace("/(tabs)");
+      } else {
+        setErr("Error al registrar sesión en el servidor");
+      }
     } catch (e: any) { setErr(e?.message || "Login failed"); }
     finally { setBusy(false); }
   }
+
 
   async function demoLogin() {
     setErr(null); setBusy(true);
@@ -71,7 +111,6 @@ export default function Login() {
     } catch (e: any) { setErr(e?.message || "Demo failed"); }
     finally { setBusy(false); }
   }
-
   function comingSoon(provider: string) {
     setErr(`${provider}: ${t("login.provider.hint")}`);
   }
